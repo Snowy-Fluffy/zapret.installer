@@ -17,7 +17,7 @@ install_dependencies() {
                 void) update_cmd="$SUDO xbps-install -S"; install_cmd="$SUDO xbps-install -y git" ;;
                 gentoo) update_cmd="$SUDO emerge --sync --quiet"; install_cmd="$SUDO emerge --ask=n dev-vcs/git" ;;
                 opensuse) update_cmd="$SUDO zypper refresh -y"; install_cmd="$SUDO zypper install -y git" ;;
-                openwrt) update_cmd="$SUDO opkg update"; install_cmd="$SUDO opkg install -y git bash git-http ncurses-term" ;;
+                openwrt) update_cmd="$SUDO opkg update"; install_cmd="$SUDO opkg install -y git bash " ;;
             esac
         fi
 
