@@ -529,7 +529,7 @@ install_zapret() {
     if [[ ! -d /opt/zapret.installer/zapret.binaries ]]; then
         echo -e "\e[45mКлонирую релиз запрета...\e[0m"
         mkdir -p /opt/zapret.installer/zapret.binaries/zapret
-        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz;; then
+        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz; then
             rm -rf /opt/zapret /tmp/zapret
             error_exit "не удалось получить релиз запрета." 
         fi
