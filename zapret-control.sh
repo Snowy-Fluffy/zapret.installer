@@ -341,14 +341,14 @@ install_dependencies() {
         . /etc/os-release
         
         declare -A command_by_ID=(
-            ["arch"]="pacman -S --noconfirm ipset"
-            ["debian"]="apt-get install -y iptables ipset"
+            ["arch"]="pacman -S --noconfirm ipset dnscrypt-proxy"
+            ["debian"]="apt-get install -y iptables ipset dnscrypt-proxy"
             ["fedora"]="dnf install -y iptables ipset"
-            ["ubuntu"]="apt-get install -y iptables ipset"
-            ["mint"]="apt-get install -y iptables ipset"
+            ["ubuntu"]="apt-get install -y iptables ipset dnscrypt-proxy"
+            ["mint"]="apt-get install -y iptables ipset dnscrypt-proxy"
             ["centos"]="sudo yum install -y ipset iptables"
             ["void"]="xbps-install -y iptables ipset"
-            ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset"
+            ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset net-dns/dnscrypt-proxy"
             ["opensuse"]="zypper install -y iptables ipset"
             ["openwrt"]="opkg install iptables ipset"
             ["altlinux"]="apt-get install -y iptables ipset"
