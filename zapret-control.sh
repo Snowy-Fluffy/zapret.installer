@@ -1,5 +1,7 @@
 #!/bin/bash
 
+warnings=()
+
 set -e  
 
 if [[ $EUID -ne 0 ]]; then
@@ -8,8 +10,13 @@ fi
 
 error_exit() {
     $TPUT_E 
+
     echo -e "\e[31mОшибка:\e[0m $1" >&2 
     exit 1
+}
+warning() {
+    echo -e "\e[43m⚠️Предупреждение: \e[0m $1" >&2
+    warnings+=("$1")
 }
 
 detect_init() {
@@ -52,7 +59,10 @@ check_zapret_exist() {
             fi
             ;;
         runit)
-            [ -d /etc/service/zapret ] && service_exists=true || service_exists=false
+            service_exists=true
+            ;;
+        openrc)
+            rc-service -l | grep -q "zapret" && service_exists=true || service_exists=false
             ;;
         sysvinit)
             [ -f /etc/init.d/zapret ] && service_exists=true || service_exists=false
@@ -106,9 +116,6 @@ check_zapret_status() {
             rc-service zapret status >/dev/null 2>&1 && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false
             rc-update show | grep -q zapret && ZAPRET_ENABLED=true || ZAPRET_ENABLED=false
             ;;
-        openrc)
-            rc-service -l | grep -q "zapret" && service_exists=true || service_exists=false
-            ;;
         procd)
             
             if /etc/init.d/zapret status | grep -q "running"; then
@@ -124,8 +131,8 @@ check_zapret_status() {
 
             ;;
         runit)
-            sv status zapret >/dev/null 2>&1 && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false
-            [ -L /var/service/zapret ] && ZAPRET_ENABLED=true || ZAPRET_ENABLED=false
+            sv status zapret | grep -q "run" && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false 
+            ls /var/service | grep -q "zapret" && ZAPRET_ENABLED=true || ZAPRET_ENABLED=false
             ;;
         sysvinit)
             service zapret status >/dev/null 2>&1 && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false
@@ -163,6 +170,38 @@ check_tput() {
 }
 
 
+is_network_error() {
+    local log="$1"
+    echo "$log" | grep -qiE "timed out|recv failure|unexpected disconnect|early EOF|RPC failed|curl.*recv"
+}
+
+try_again() {
+    local error_message="$1"
+    shift
+
+    local -a command=("$@") 
+    local attempt=0
+    local max_attempts=3
+    local success=0
+
+    while (( attempt < max_attempts )); do
+        ((attempt++))
+
+        (( attempt > 1 )) && echo -e "\e[33mПопытка $attempt из $max_attempts...\e[0m"
+
+
+        output=$("${command[@]}" 2>&1) && success=1 && break
+
+        if ! is_network_error "$output"; then
+            echo "$output" >&2
+            error_exit "не удалось склонировать репозиторий."
+        fi
+        sleep 2
+    done
+
+    (( success == 0 )) && error_exit "$error_message"
+}
+
 
 
 get_fwtype() {
@@ -183,16 +222,18 @@ get_fwtype() {
                         FWTYPE="nftables"
                         return 0
                     else
-                        echo "Не удалось определить файрвол. По умолчанию установлен nftables, вы его можете изменить в файле /opt/zapret/config."
-                        echo "Продолжаю через 5 секунд..."
+                        echo -e "\e[1;33m⚠️ Не удалось определить тип файрвола.\e[0m"
+                        echo -e "По умолчанию будет использован: \e[1;36mnftables\e[0m"
+                        echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+                        echo -e "⏳ Продолжаю через 5 секунд..."
                         FWTYPE="nftables"
                         sleep 5
                         return 0 
                     fi
                 else
-                    echo "Не удалось определить файрвол. По умолчанию установлен nftables, вы его можете изменить в файле /opt/zapret/config."
-                    echo "Продолжаю через 5 секунд..."
-                    
+                    echo -e "\e[1;33m⚠️ iptables не найден. Используется по умолчанию: \e[1;36mnftables\e[0m"
+                    echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+                    echo -e "⏳ Продолжаю через 5 секунд..."
                     FWTYPE="nftables"
                     sleep 5
                     return 0
@@ -207,15 +248,18 @@ get_fwtype() {
                 elif [[ "$iptables_version" == *"nf_tables"* ]]; then
                     FWTYPE="nftables"
                 else
-                    echo "Не удалось определить файрвол. По умолчанию установлен iptables, вы его можете изменить в файле /opt/zapret/config."
-                    echo "Продолжаю через 5 секунд..."
+                    echo -e "\e[1;33m⚠️ Не удалось определить тип файрвола.\e[0m"
+                    echo -e "По умолчанию используется: \e[1;36miptables\e[0m"
+                    echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+                    echo -e "⏳ Продолжаю через 5 секунд..."
                     FWTYPE="iptables"
                     sleep 5
                 fi
             else
-                echo "Не удалось определить файрвол. По умолчанию установлен iptables, вы его можете изменить в файле /opt/zapret/config."
-                echo "Продолжаю через 5 секунд..."
-                
+                echo -e "\e[1;31m❌ iptables не найден!\e[0m"
+                echo -e "По умолчанию используется: \e[1;36miptables\e[0m"
+                echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+                echo -e "⏳ Продолжаю через 5 секунд..."
                 FWTYPE="iptables"
                 sleep 5
             fi
@@ -224,23 +268,25 @@ get_fwtype() {
             if exists ipfw ; then
                 FWTYPE="ipfw"
             else
-                echo "Не удалось определить файрвол. По умолчанию установлен iptables, вы его можете изменить в файле /opt/zapret/config."
-                echo "Продолжаю через 5 секунд..."
-                
+                echo -e "\e[1;33m⚠️ ipfw не найден!\e[0m"
+                echo -e "По умолчанию используется: \e[1;36miptables\e[0m"
+                echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+                echo -e "⏳ Продолжаю через 5 секунд..."
                 FWTYPE="iptables"
                 sleep 5
             fi
             ;;
         *)
-        echo "Не удалось определить файрвол. По умолчанию установлен iptables, вы его можете изменить в файле /opt/zapret/config."
-        echo "Продолжаю через 5 секунд..."
-        
-        FWTYPE="iptables"
-        sleep 5
+            echo -e "\e[1;31m❌ Неизвестная система: $UNAME\e[0m"
+            echo -e "По умолчанию используется: \e[1;36miptables\e[0m"
+            echo -e "\e[2m(Можно изменить в /opt/zapret/config)\e[0m"
+            echo -e "⏳ Продолжаю через 5 секунд..."
+            FWTYPE="iptables"
+            sleep 5
             ;;
     esac
-
 }
+
 
 
 manage_service() {
@@ -269,7 +315,7 @@ manage_autostart() {
             ;;
         runit)
             if [[ "$1" == "enable" ]]; then
-                ln -s /etc/sv/zapret /var/service/
+                ln -fs /opt/zapret/init.d/runit/zapret/ /var/service/
             else
                 rm -f /var/service/zapret
             fi
@@ -300,6 +346,7 @@ install_dependencies() {
             ["fedora"]="dnf install -y iptables ipset"
             ["ubuntu"]="apt-get install -y iptables ipset"
             ["mint"]="apt-get install -y iptables ipset"
+            ["centos"]="sudo yum install -y ipset iptables"
             ["void"]="xbps-install -y iptables ipset"
             ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset"
             ["opensuse"]="zypper install -y iptables ipset"
@@ -329,82 +376,139 @@ install_dependencies() {
 toggle_service() {
     while true; do
         clear
-        echo "===== Управление сервисом Запрета ====="
-        if [[ $ZAPRET_ACTIVE == true ]]; then echo "!Запрет запущен!"; fi
-        if [[ $ZAPRET_ACTIVE == false ]]; then echo "!Запрет выключен!"; fi
-        if [[ $ZAPRET_ENABLED == true ]]; then echo "!Запрет в автозагрузке!"; fi
-        if [[ $ZAPRET_ENABLED == false ]]; then echo "!Запрет не в автозагрузке!"; fi
-        echo "======================================="
-        echo "1) $( [[ $ZAPRET_ENABLED == true ]] && echo "Убрать из автозагрузки" || echo "Добавить в автозагрузку" )"
-        echo "2) $( [[ $ZAPRET_ACTIVE == true ]] && echo "Выключить Запрет" || echo "Включить Запрет" )"
-        echo "3) Посмотреть статус запрета"
-        echo "4) Перезапустить запрет"
-        echo "5) Выйти в меню"
-        read -p "Выберите действие: " CHOICE
+        echo -e "\e[1;36m╔═════════════════════════════════════════════════╗"
+        echo -e "║       🛠️ Управление сервисом Запрета            ║"
+        echo -e "╚═════════════════════════════════════════════════╝\e[0m"
+
+        if [[ $ZAPRET_ACTIVE == true ]]; then 
+            echo -e "  \e[1;32m✔️ Запрет запущен\e[0m"
+        else 
+            echo -e "  \e[1;31m❌ Запрет выключен\e[0m"
+        fi
+
+        if [[ $ZAPRET_ENABLED == true ]]; then 
+            echo -e "  \e[1;32m🔁 Запрет в автозагрузке\e[0m"
+        else 
+            echo -e "  \e[1;33m⏹️ Запрет не в автозагрузке\e[0m"
+        fi
+
+        echo ""
+
+        echo -e "  \e[1;33m1)\e[0m $( [[ $ZAPRET_ENABLED == true ]] && echo "🚫 Убрать из автозагрузки" || echo "✅ Добавить в автозагрузку" )"
+        echo -e "  \e[1;32m2)\e[0m $( [[ $ZAPRET_ACTIVE == true ]] && echo "⛔ Выключить Запрет" || echo "▶️ Включить Запрет" )"
+        echo -e "  \e[1;36m3)\e[0m 🔍 Посмотреть статус Запрета"
+        echo -e "  \e[1;35m4)\e[0m 🔄 Перезапустить Запрет"
+        echo -e "  \e[1;31m5)\e[0m 🚪 Выйти в меню"
+
+        echo ""
+        echo -e "\e[1;96m✨ Сделано с любовью 💙\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+
+        read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
         case "$CHOICE" in
-            1) [[ $ZAPRET_ENABLED == true ]] && manage_autostart disable || manage_autostart enable;main_menu;;
-            2) [[ $ZAPRET_ACTIVE == true ]] && manage_service stop || manage_service start;main_menu;;
-            3) manage_service status; bash -c 'read -p "Нажмите Enter для продолжения..."'; main_menu;;
-            4) manage_service restart;main_menu;;
-            5) main_menu;;
-            *) echo "Неверный ввод!"; sleep 2;;
+            1) 
+                [[ $ZAPRET_ENABLED == true ]] && manage_autostart disable || manage_autostart enable
+                main_menu
+                ;;
+            2) 
+                [[ $ZAPRET_ACTIVE == true ]] && manage_service stop || manage_service start
+                main_menu
+                ;;
+            3) 
+                manage_service status
+                read -p $'\e[1;36mНажмите Enter для продолжения...\e[0m'
+                main_menu
+                ;;
+            4) 
+                manage_service restart
+                main_menu
+                ;;
+            5) 
+                main_menu
+                ;;
+            *) 
+                echo -e "\e[1;31m❌ Неверный ввод! Попробуйте снова.\e[0m"
+                sleep 2
+                ;;
         esac
     done
 }
-
 
 main_menu() {
     while true; do
         clear
         check_zapret_status
         check_zapret_exist
-        echo "===== Меню управления Запретом ====="
-        if [[ $ZAPRET_ACTIVE == true ]]; then echo "!Запрет запущен!"; fi
-        if [[ $ZAPRET_ACTIVE == false ]]; then echo "!Запрет выключен!"; fi 
-        if [[ $ZAPRET_ENABLED == true ]]; then echo "!Запрет в автозагрузке!"; fi
-        if [[ $ZAPRET_ENABLED == false ]]; then echo "!Запрет не в автозагрузке!"; fi
-        if [[ $ZAPRET_EXIST == false ]]; then clear; echo "===== Меню управления Запретом ====="; echo "!Запрет не установлен!"; fi
-        echo "====================================="
+        echo -e "\e[1;36m╔════════════════════════════════════════════╗"
+        echo -e "║         ⚙️ Меню управления Запретом        ║"
+        echo -e "╚════════════════════════════════════════════╝\e[0m"
+
+        if [[ $ZAPRET_ACTIVE == true ]]; then 
+            echo -e "  \e[1;32m✔️ Запрет запущен\e[0m"
+        else 
+            echo -e "  \e[1;31m❌ Запрет выключен\e[0m"
+        fi 
+
+        if [[ $ZAPRET_ENABLED == true ]]; then 
+            echo -e "  \e[1;32m🔁 Запрет в автозагрузке\e[0m"
+        else 
+            echo -e "  \e[1;33m⏹️ Запрет не в автозагрузке\e[0m"
+        fi
+
+        echo ""
+
         if [[ $ZAPRET_EXIST == true ]]; then
-            echo "1) Проверить на обновления и обновить"
-            echo "2) Сменить конфигурацию запрета"
-            echo "3) Управление сервисом запрета"
-            echo "4) Удалить Запрет"
-            echo "5) Выйти"
-            read -p "Выберите действие: " CHOICE
+            echo -e "  \e[1;33m1)\e[0m 🔄 Проверить на обновления и обновить"
+            echo -e "  \e[1;36m2)\e[0m ⚙️ Сменить конфигурацию запрета"
+            echo -e "  \e[1;35m3)\e[0m 🛠️ Управление сервисом запрета"
+            echo -e "  \e[1;31m4)\e[0m 🗑️ Удалить Запрет"
+            echo -e "  \e[1;34m5)\e[0m 🚪 Выйти"
+        else
+            echo -e "  \e[1;32m1)\e[0m 📥 Установить Запрет"
+            echo -e "  \e[1;36m2)\e[0m 📜 Проверить скрипт на обновления"
+            echo -e "  \e[1;34m3)\e[0m 🚪 Выйти"
+        fi
+
+        echo ""
+        echo -e "\e[1;96m✨ Сделано с любовью 💙\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+
+        if [[ $ZAPRET_EXIST == true ]]; then
+            read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
             case "$CHOICE" in
                 1) update_zapret_menu;;
                 2) change_configuration;;
                 3) toggle_service;;
                 4) uninstall_zapret;;
                 5) $TPUT_E; exit 0;;
-                *) echo "Неверный ввод!"; sleep 2;;
+                *) echo -e "\e[1;31m❌ Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
             esac
         else
-            echo "1) Установить Запрет"
-            echo "2) Проверить скрипт на обновления"
-            echo "3) Выйти"
-            read -p "Выберите действие: " CHOICE
+            read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
             case "$CHOICE" in
                 1) install_zapret; main_menu;;
                 2) update_script;;
                 3) tput rmcup; exit 0;;
-                *) echo "Неверный ввод!"; sleep 2;;
+                *) echo -e "\e[1;31m❌ Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
             esac
         fi
     done
 }
 
 
+
+
 install_zapret() {
-    install_dependencies
+    install_dependencies 
     if [[ $dir_exists == true ]]; then
         read -p "На вашем компьютере был найден запрет (/opt/zapret). Для продолжения его необходимо удалить. Вы действительно хотите удалить запрет (/opt/zapret) и продолжить? (y/N): " answer
         case "$answer" in
             [Yy]* ) 
                 if [[ -f /opt/zapret/uninstall_easy.sh ]]; then
                     cd /opt/zapret
+                    sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
                     yes "" | ./uninstall_easy.sh
+                    sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
                 fi
                 rm -rf /opt/zapret
 
@@ -417,36 +521,31 @@ install_zapret() {
     
 
     echo "Клонирую репозиторий..."
-    if ! git clone https://github.com/bol-van/zapret /opt/zapret ; then
-         error_exit "нестабильноe/слабое подключение к интернету."
-    fi
-    echo "Клонирование успешно завершено."
-
+    git clone https://github.com/bol-van/zapret /opt/zapret
     echo "Клонирую репозиторий..."
-        if ! git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs ; then
-        error_exit "нестабильноe/слабое подключение к интернету."
-    fi
+    git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
     echo "Клонирование успешно завершено."
     
-
     if [[ ! -d /opt/zapret.installer/zapret.binaries ]]; then
-        echo "Клонирую релиз запрета..."
+        echo -e "\e[45mКлонирую релиз запрета...\e[0m"
         mkdir -p /opt/zapret.installer/zapret.binaries/zapret
-        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-v70.4.tar.gz https://github.com/bol-van/zapret/releases/download/v70.4/zapret-v70.4.tar.gz; then
-            rm -rf /opt/zapret.installer/
-            error_exit "не удалось получить релиз запрета."
+        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz;; then
+            rm -rf /opt/zapret /tmp/zapret
+            error_exit "не удалось получить релиз запрета." 
         fi
         echo "Получение запрета завершено."
-        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v70.4.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v70.4/binaries/ /opt/zapret/binaries
+        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета." 
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-release/binaries/ /opt/zapret/binaries
 
     fi
     if [[ ! -d /opt/zapret/binaries ]]; then
-        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v70.4.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v70.4/binaries/ /opt/zapret/binaries
+        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета."
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-release/binaries/ /opt/zapret/binaries
     fi
     cd /opt/zapret
+    sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
     yes "" | ./install_easy.sh
+    sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
     cp -r /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось скопировать скрипт в /bin" 
     chmod +x /bin/zapret
     rm -f /opt/zapret/config 
@@ -456,58 +555,96 @@ install_zapret() {
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
 
     cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
-    manage_service restart
-    configure_zapret_conf
+    
+    if [[ INIT_SYSTEM = runit ]]; then
+        read -p "Для окончания установки необходимо перезапустить ваше устройство. Перезапустить его сейчас? (Y/n): " answer
+        case "$answer" in
+        [Yy]* ) 
+            reboot
+            ;;
+        [Nn]* )
+            TPUT_E
+            exit 1
+            ;;
+        * ) 
+            reboot
+            ;;
+    esac
+    else
+        manage_service restart
+        configure_zapret_conf
+    fi
     
 }
 
 
-change_configuration(){
+
+
+change_configuration() {
     while true; do
         clear
         cur_conf
         cur_list
-        echo "===== Управление конфигурацией Запрета ======"
-        echo "Используется стратегия: $cr_cnf" 
-        echo "Используется хостлист: $cr_lst"
-        echo "============================================="
-        echo "1) Сменить стратегию"
-        echo "2) Сменить лист обхода"
-        echo "3) Добавить ip-адреса или домены в лист обхода"
-        echo "4) Удалить ip-адреса или домены из листа обхода"
-        echo "5) Поиск ip-адреса или домена в листе обхода"
-        echo "6) Выйти в меню"
-        read -p "Выберите действие: " CHOICE
+
+        echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
+        echo -e "║     ⚙️  Управление конфигурацией Запрета     ║"
+        echo -e "╚══════════════════════════════════════════════╝\e[0m"
+        echo -e "  \e[1;33m📌 Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
+        echo -e "  \e[1;33m📜 Используемый хостлист:\e[0m \e[1;32m$cr_lst\e[0m"
+        echo ""
+        echo -e "  \e[1;34m1)\e[0m 🔁 Сменить стратегию"
+        echo -e "  \e[1;34m2)\e[0m 📄 Сменить лист обхода"
+        echo -e "  \e[1;34m3)\e[0m ➕ Добавить IP или домены в лист"
+        echo -e "  \e[1;34m4)\e[0m ➖ Удалить IP или домены из листа"
+        echo -e "  \e[1;34m5)\e[0m 🔍 Найти IP или домены в листе"
+        echo -e "  \e[1;31m6)\e[0m 🚪 Выйти в меню"
+        echo ""
+        echo -e "\e[1;96m✨ Сделано с любовью 💙\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+
+        read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
         case "$CHOICE" in
-            1) configure_zapret_conf;;
-            2) configure_zapret_list;;
-            3) add_to_zapret;;
-            4) delete_from_zapret;;
-            5) search_in_zapret;;
-            6) main_menu;;
-            *) echo "Неверный ввод!"; sleep 2;;
+            1) configure_zapret_conf ;;
+            2) configure_zapret_list ;;
+            3) add_to_zapret ;;
+            4) delete_from_zapret ;;
+            5) search_in_zapret ;;
+            6) main_menu ;;
+            *) echo -e "\e[1;31m❌ Неверный ввод! Попробуйте снова.\e[0m"; sleep 2 ;;
         esac
     done
 }
+
+
+
+
+
 
 
 update_zapret_menu(){
     while true; do
         clear
-        echo "===== Обновление Запрета ====="
-        echo "=============================="
-        echo "1) Обновить zapret и скрипт (не рекомендуется)"
-        echo "2) Обновить скрипт"
-        echo "3) Выйти в меню"
-        read -p "Выберите действие: " CHOICE
+        echo -e "\e[1;36m╔════════════════════════════════════╗"
+        echo -e "║        🔄 Обновление Запрета       ║"
+        echo -e "╚════════════════════════════════════╝\e[0m"
+        echo -e "  \e[1;33m1)\e[0m 🔧 Обновить \e[33mzapret и скрипт\e[0m \e[2m(не рекомендуется)\e[0m"
+        echo -e "  \e[1;32m2)\e[0m 📜 Обновить только \e[32mскрипт\e[0m"
+        echo -e "  \e[1;31m3)\e[0m 🚪 Выйти в меню"
+        echo ""
+        echo -e "\e[1;96m✨ Сделано с любовью 💙\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+        read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
         case "$CHOICE" in
             1) update_zapret;;
             2) update_installed_script;;
             3) main_menu;;
-            *) echo "Неверный ввод!"; sleep 2;;
+            *) echo -e "\e[1;31m❌ Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
         esac
     done
 }
+
+
+
 
 update_zapret() {
     if [[ -d /opt/zapret ]]; then
@@ -655,12 +792,10 @@ cur_list() {
 
 configure_zapret_conf() {
     if [[ ! -d /opt/zapret/zapret.cfgs ]]; then
-        echo "Клонирую конфигурации..."
-        if ! git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs ; then
-            error_exit "нестабильноe/слабое подключение к интернету."
-        fi
-            echo "Клонирование успешно завершено."
-            sleep 2
+        echo -e "\e[35mКлонирую конфигурации...\e[0m"
+        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
+        echo -e "\e[32mКлонирование успешно завершено.\e[0m"
+        sleep 2
     fi
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
@@ -706,12 +841,10 @@ configure_zapret_conf() {
 
 configure_zapret_list() {
     if [[ ! -d /opt/zapret/zapret.cfgs ]]; then
-        echo "Клонирую конфигурации..."
-        if ! git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs ; then
-            error_exit "нестабильноe/слабое подключение к интернету."
-        fi
-            echo "Клонирование успешно завершено."
-            sleep 2
+        echo -e "\e[35mКлонирую конфигурации...\e[0m"
+        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
+        echo -e "\e[32mКлонирование успешно завершено.\e[0m"
+        sleep 2
     fi
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
@@ -722,7 +855,7 @@ configure_zapret_list() {
     clear
 
 
-    echo "Выберите хостлист (можно поменять в любой момент, запустив Меню управления запретом еще раз):"
+    echo -e "\e[36mВыберите хостлист (можно поменять в любой момент, запустив Меню управления запретом еще раз):\e[0m"
     PS3="Введите номер листа (по умолчанию 'list-basic.txt'): "
 
     select LIST in $(for f in /opt/zapret/zapret.cfgs/lists/list*; do echo "$(basename "$f")"; done) "Отмена"; do
@@ -732,12 +865,12 @@ configure_zapret_list() {
             LIST_PATH="/opt/zapret/zapret.cfgs/lists/$LIST"
             rm -f /opt/zapret/ipset/zapret-hosts-user.txt
             cp "$LIST_PATH" /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось скопировать хостлист"
-            echo "Хостлист '$LIST' установлен."
+            echo -e "\e[32mХостлист '$LIST' установлен.\e[0m"
 
             sleep 2
             break
         else
-            echo "Неверный выбор, попробуйте снова."
+            echo -e "\e[31mНеверный выбор, попробуйте снова.\e[0m"
         fi
     done
     manage_service restart

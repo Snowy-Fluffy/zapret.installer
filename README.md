@@ -34,6 +34,8 @@ zapret
 О всех багах и недочётах сообщайте в issues или в моём [Telegram-канале](https://t.me/linux_hi).  
 Поддержка других init-систем и дистрибутивов будет добавлена в дальнейшем.  
 
+Попробуйте также [zapret-discord-youtube-linux](https://github.com/Sergeydigl3/zapret-discord-youtube-linux) от Sergeydigl3 
+
 ### Скриншоты  
 ![Основное меню](https://snowyfluffy.ru/files/github/zapret-installer1.png)  
 ![Подменю](https://snowyfluffy.ru/files/github/zapret-installer2.png)  
