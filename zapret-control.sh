@@ -361,7 +361,7 @@ install_dependencies() {
             ["fedora"]="dnf install -y iptables ipset"
             ["ubuntu"]="apt-get install -y iptables ipset"
             ["mint"]="apt-get install -y iptables ipset"
-            ["centos"]="sudo yum install -y ipset iptables"
+            ["centos"]="yum install -y ipset iptables"
             ["void"]="xbps-install -y iptables ipset"
             ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset"
             ["opensuse"]="zypper install -y iptables ipset"
@@ -545,7 +545,7 @@ install_zapret() {
     git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
     echo "Клонирование успешно завершено."
     
-    sudo rm -rf /opt/zapret/binaries
+    rm -rf /opt/zapret/binaries
     echo -e "\e[45mКлонирую релиз запрета...\e[0m"
     if [[ ! -d /opt/zapret.installer/zapret.binaries/ ]]; then
         rm -rf /opt/zapret.installer/zapret.binaries/
