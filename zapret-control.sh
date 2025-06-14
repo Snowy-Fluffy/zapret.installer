@@ -511,6 +511,8 @@ install_zapret() {
                     sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
                 fi
                 rm -rf /opt/zapret
+                echo "Удаляю zapret..."
+                sleep 3
 
                 ;;
             * ) 
@@ -529,18 +531,20 @@ install_zapret() {
     if [[ ! -d /opt/zapret.installer/zapret.binaries ]]; then
         echo -e "\e[45mКлонирую релиз запрета...\e[0m"
         mkdir -p /opt/zapret.installer/zapret.binaries/zapret
-        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz; then
+        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz; then
             rm -rf /opt/zapret /tmp/zapret
             error_exit "не удалось получить релиз запрета." 
         fi
         echo "Получение запрета завершено."
-        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета." 
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-release/binaries/ /opt/zapret/binaries
+        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/ || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета." 
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1/binaries/ /opt/zapret/binaries
 
     fi
     if [[ ! -d /opt/zapret/binaries ]]; then
-        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-release.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета."
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-release/binaries/ /opt/zapret/binaries
+        tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/ || rm -rf /opt/zapret.installer/ || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета."
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1/binaries/ /opt/zapret/binaries
+
+
     fi
     cd /opt/zapret
     sed -i '235s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
@@ -889,6 +893,8 @@ uninstall_zapret() {
             rm -rf /opt/zapret
             rm -rf /opt/zapret.installer/
             rm -r /bin/zapret
+            echo "Удаляю zapret..."
+            sleep 3
             ;;
         * ) 
             main_menu
