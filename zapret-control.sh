@@ -774,8 +774,11 @@ search_in_zapret() {
 cur_conf() {
     cr_cnf="неизвестно"
     if [[ -f /opt/zapret/config ]]; then
+        mkdir -p /tmp/zapret.installer-tmp/
+        cp -r /opt/zapret/config /tmp/zapret.installer-tmp/config
+        sed -i "s/^FWTYPE=.*/FWTYPE=iptables/" /tmp/zapret.installer-tmp/config
         for file in /opt/zapret/zapret.cfgs/configurations/*; do
-            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum /opt/zapret/config | awk '{print $1}')" ]]; then
+            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum /tmp/zapret.installer-tmp/config | awk '{print $1}')" ]]; then
                 cr_cnf="$(basename "$file")"
                 break
             fi
