@@ -541,7 +541,10 @@ install_zapret() {
         error_exit "не удалось получить релиз запрета." 
     fi
     echo "Получение запрета завершено."
-    tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/ || rm -rf /opt/zapret.installer/; error_exit "не удалось разархивировать архив с релизом запрета." 
+    if ! tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/; then
+        rm -rf /opt/zapret.installer/
+        error_exit "не удалось разархивировать архив с релизом запрета."
+    fi
     cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1/binaries/ /opt/zapret/binaries
 
     cd /opt/zapret
