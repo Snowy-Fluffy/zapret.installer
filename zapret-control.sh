@@ -2,8 +2,21 @@
 
 set -e  
 
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    if command -v sudo > /dev/null 2>&1; then
+        SUDO="sudo"
+    elif command -v doas > /dev/null 2>&1; then
+        SUDO="doas"
+    else
+        echo "Скрипт не может быть выполнен не от имени суперпользователя."
+        exit 1
+    fi
+fi
+
 if [[ $EUID -ne 0 ]]; then
-    exec sudo "$0" "$@"
+    exec $SUDO "$0" "$@"
 fi
 
 error_exit() {
@@ -342,15 +355,15 @@ install_dependencies() {
         . /etc/os-release
         
         declare -A command_by_ID=(
-            ["arch"]="pacman -S --noconfirm ipset dnscrypt-proxy"
-            ["artix"]="pacman -S --noconfirm ipset dnscrypt-proxy"
-            ["debian"]="apt-get install -y iptables ipset dnscrypt-proxy"
+            ["arch"]="pacman -S --noconfirm ipset "
+            ["artix"]="pacman -S --noconfirm ipset "
+            ["debian"]="apt-get install -y iptables ipset "
             ["fedora"]="dnf install -y iptables ipset"
-            ["ubuntu"]="apt-get install -y iptables ipset dnscrypt-proxy"
-            ["mint"]="apt-get install -y iptables ipset dnscrypt-proxy"
+            ["ubuntu"]="apt-get install -y iptables ipset"
+            ["mint"]="apt-get install -y iptables ipset"
             ["centos"]="sudo yum install -y ipset iptables"
             ["void"]="xbps-install -y iptables ipset"
-            ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset net-dns/dnscrypt-proxy"
+            ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset"
             ["opensuse"]="zypper install -y iptables ipset"
             ["openwrt"]="opkg install iptables ipset"
             ["altlinux"]="apt-get install -y iptables ipset"
