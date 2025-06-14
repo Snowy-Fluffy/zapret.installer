@@ -1,7 +1,5 @@
 #!/bin/bash
 
-warnings=()
-
 set -e  
 
 if [[ $EUID -ne 0 ]]; then
@@ -14,10 +12,13 @@ error_exit() {
     echo -e "\e[31mОшибка:\e[0m $1" >&2 
     exit 1
 }
-warning() {
-    echo -e "\e[43m⚠️Предупреждение: \e[0m $1" >&2
-    warnings+=("$1")
+check_fs() {
+    if [ "$(awk '$2 == "/" {print $4}' /proc/mounts)" = "ro" ]; then
+    error_exit "файловая система только для чтения, не могу продолжить."
+fi
 }
+
+
 
 detect_init() {
     GET_LIST_PREFIX=/ipset/get_
@@ -653,16 +654,15 @@ update_zapret_menu(){
 
 update_zapret() {
     if [[ -d /opt/zapret ]]; then
-        cd /opt/zapret && git pull
+        cd /opt/zapret && git fetch origin main; git reset --hard origin/main
     fi
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git pull
+        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git pull
+        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
         rm -f /bin/zapret
-        cp -r /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось скопировать скрипт в /bin при обновлении"
-        chmod +x /bin/zapret
+        ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     fi
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
@@ -671,12 +671,13 @@ update_zapret() {
 
 update_script() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git pull
+        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git pull
+        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
     fi
-
+    rm -f /bin/zapret
+    ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
 }
@@ -909,5 +910,6 @@ uninstall_zapret() {
 check_openwrt
 check_tput
 $TPUT_B
+check_fs
 detect_init
 main_menu

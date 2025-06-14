@@ -48,6 +48,11 @@ install_dependencies() {
     fi
 }
 
+if [ "$(awk '$2 == "/" {print $4}' /proc/mounts)" = "ro" ]; then
+    echo "Файловая система только для чтения, не могу продолжать."
+    exit 1
+fi
+
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
 else
