@@ -343,6 +343,7 @@ install_dependencies() {
         
         declare -A command_by_ID=(
             ["arch"]="pacman -S --noconfirm ipset dnscrypt-proxy"
+            ["artix"]="pacman -S --noconfirm ipset dnscrypt-proxy"
             ["debian"]="apt-get install -y iptables ipset dnscrypt-proxy"
             ["fedora"]="dnf install -y iptables ipset"
             ["ubuntu"]="apt-get install -y iptables ipset dnscrypt-proxy"
@@ -684,13 +685,12 @@ update_script() {
 
 update_installed_script() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git pull
+        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git pull
+        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
         rm -f /bin/zapret
-        cp -r /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось скопировать скрипт в /bin при обновлении"
-        chmod +x /bin/zapret
+        ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
         manage_service restart
     fi
 
@@ -802,20 +802,21 @@ cur_list() {
 configure_zapret_conf() {
     if [[ ! -d /opt/zapret/zapret.cfgs ]]; then
         echo -e "\e[35mКлонирую конфигурации...\e[0m"
+        manage_service stop
         git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
         echo -e "\e[32mКлонирование успешно завершено.\e[0m"
+        manage_service start
         sleep 2
     fi
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
-        cd /opt/zapret/zapret.cfgs && git pull
+        manage_service stop 
+        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        manage_service start
         sleep 2
     fi
 
     clear
-
-
-
 
     echo "Выберите стратегию (можно поменять в любой момент, запустив Меню управления запретом еще раз):"
     PS3="Введите номер стратегии (по умолчанию 'general'): "
@@ -851,13 +852,17 @@ configure_zapret_conf() {
 configure_zapret_list() {
     if [[ ! -d /opt/zapret/zapret.cfgs ]]; then
         echo -e "\e[35mКлонирую конфигурации...\e[0m"
+        manage_service stop
         git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
+        manage service start
         echo -e "\e[32mКлонирование успешно завершено.\e[0m"
         sleep 2
     fi
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
-        cd /opt/zapret/zapret.cfgs && git pull
+        manage_service stop
+        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        manage_service start
         sleep 2
     fi
 

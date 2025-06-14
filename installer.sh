@@ -12,7 +12,7 @@ install_dependencies() {
 
         find_package_manager() {
             case "$1" in
-                arch)      echo "$SUDO pacman -Syu --noconfirm && $SUDO pacman -S --noconfirm git" ;;
+                arch|artix)      echo "$SUDO pacman -Syu --noconfirm && $SUDO pacman -S --noconfirm git" ;;
                 debian|ubuntu|mint) echo "$SUDO apt update -y && $SUDO apt install -y git" ;;
                 fedora)    echo "$SUDO dnf check-update -y && $SUDO dnf install -y git" ;;
                 void)      echo "$SUDO xbps-install -S && $SUDO xbps-install -y git" ;;
