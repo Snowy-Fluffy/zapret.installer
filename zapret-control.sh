@@ -49,6 +49,10 @@ detect_init() {
         INIT_SYSTEM="openrc"
     elif command -v runit >/dev/null 2>&1; then
         INIT_SYSTEM="runit"
+        [ -f /etc/os-release ] && . /etc/os-release
+        if [ $ID = artix ]; then
+            INIT_SYSTEM="runit-artix"
+        fi
     elif [ -x /sbin/init ] && /sbin/init --version 2>&1 | grep -qi "sysv init"; then
         INIT_SYSTEM="sysvinit" 
     else
@@ -73,7 +77,10 @@ check_zapret_exist() {
             fi
             ;;
         runit)
-            service_exists=true
+            ls /var/service | grep -q "zapret" && service_exists=true || service_exists=false
+            ;;
+        runit-artix)
+            ls /run/runit/service | grep -q "zapret" && service_exists=true || service_exists=false
             ;;
         openrc)
             rc-service -l | grep -q "zapret" && service_exists=true || service_exists=false
@@ -147,6 +154,10 @@ check_zapret_status() {
         runit)
             sv status zapret | grep -q "run" && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false 
             ls /var/service | grep -q "zapret" && ZAPRET_ENABLED=true || ZAPRET_ENABLED=false
+            ;;
+        runit-artix)
+            sv status zapret | grep -q "run" && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false 
+            ls /run/runit/service | grep -q "zapret" && ZAPRET_ENABLED=true || ZAPRET_ENABLED=false
             ;;
         sysvinit)
             service zapret status >/dev/null 2>&1 && ZAPRET_ACTIVE=true || ZAPRET_ACTIVE=false
@@ -311,7 +322,7 @@ manage_service() {
         openrc)
             rc-service zapret "$1"
             ;;
-        runit)
+        runit|runit-artix)
             sv "$1" zapret
             ;;
         sysvinit)
@@ -332,6 +343,13 @@ manage_autostart() {
                 ln -fs /opt/zapret/init.d/runit/zapret/ /var/service/
             else
                 rm -f /var/service/zapret
+            fi
+            ;;
+        runit-artix)
+            if [[ "$1" == "enable" ]]; then
+                ln -fs /opt/zapret/init.d/runit/zapret/ /run/runit/service/
+            else
+                rm -f /run/runit/service/zapret
             fi
             ;;
         sysvinit)
