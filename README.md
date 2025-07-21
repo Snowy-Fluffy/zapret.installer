@@ -35,7 +35,7 @@ zapret
 - OpenWrt
 
 > [!IMPORTANT]
-> На Openwrt также советую попробовать (zapret-openwrt)[https://github.com/remittor/zapret-openwrt]
+> На Openwrt также советую попробовать [zapret-openwrt](https://github.com/remittor/zapret-openwrt)
 
 > [!IMPORTANT]
 > Системы инициализации *runit*, *OpenRC* и *SysVinit* поддерживаются только частично.
