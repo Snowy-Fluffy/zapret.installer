@@ -111,8 +111,6 @@ install_zapret() {
     yes "" | ./install_easy.sh
     sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
     rm -f /bin/zapret
-    cp -r /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось скопировать скрипт в /bin"
-    chmod +x /bin/zapret
     rm -f /opt/zapret/config
     cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
