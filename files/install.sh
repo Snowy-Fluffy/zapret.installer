@@ -186,6 +186,9 @@ update_zapret() {
         download_zapret || error_exit "не удалось обновить запрет"
         echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
     fi
+    sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+    yes "" | ./install_easy.sh
+    sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
 
 
 
