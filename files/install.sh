@@ -64,11 +64,11 @@ download_zapret()
     echo "Клонирование успешно завершено."
     if [ CONF_EXISTS = 1 ]; then
         rm -f /opt/zapret/config
-        mv $TEMP_DIR_CONF/config /opt/zapret/config
+        cp -r $TEMP_DIR_CONF/config /opt/zapret/config
     fi
     if [ LIST_EXISTS = 1 ]; then 
         rm -f /opt/zapret/ipset/zapret-hosts-user.txt
-        mv $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
+        cp -r $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
     fi
     rm -rf $TEMP_DIR_CONF
     rm -rf $TEMP_DIR_BIN
