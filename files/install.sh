@@ -249,6 +249,9 @@ uninstall_zapret() {
             rm -f /opt/zapret-ver
             echo "Удаляю zapret..."
             sleep 3
+            TPUT_E
+            echo "Запрет удален"
+            exit
             ;;
         * )
             main_menu
