@@ -10,7 +10,7 @@ remote_latest_version() {
 
 get_latest_version() {
     if [ -z "$rver" ]; then
-        echo "неизвестно"
+        echo "Неизвестно"
     else
         echo "$rver"
     fi
@@ -64,11 +64,11 @@ download_zapret()
     echo "Клонирование успешно завершено."
     if [ CONF_EXISTS = 1 ]; then
         rm -f /opt/zapret/config
-        cp -r $TEMP_DIR_CONF/config /opt/zapret/config
+        mv $TEMP_DIR_CONF/config /opt/zapret/config
     fi
     if [ LIST_EXISTS = 1 ]; then 
         rm -f /opt/zapret/ipset/zapret-hosts-user.txt
-        cp -r $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
+        mv $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
     fi
     rm -rf $TEMP_DIR_CONF
     rm -rf $TEMP_DIR_BIN
@@ -197,6 +197,12 @@ update_zapret() {
         rm -f /bin/zapret
         ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     fi
+    rm -f /opt/zapret/config
+    cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
+    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
+    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
+    configure_zapret_conf 
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
@@ -240,6 +246,7 @@ uninstall_zapret() {
             rm -rf /opt/zapret
             rm -rf /opt/zapret.installer/
             rm -r /bin/zapret
+            rm -f /opt/zapret-ver
             echo "Удаляю zapret..."
             sleep 3
             ;;
