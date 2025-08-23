@@ -27,17 +27,7 @@ zapret_update_check()
 }
 download_zapret()
 {
-    LIST_EXISTS=0
-    CONF_EXISTS=0
-    TEMP_DIR_CONF=$(mktemp -d)
-    if [[ -f /opt/zapret/config ]]; then
-        cp -r /opt/zapret/config $TEMP_DIR_CONF/config
-        CONF_EXISTS=1
-    fi
-    if [[ -f /opt/zapret/ipset/zapret-hosts-user.txt ]]; then
-        cp -r /opt/zapret/ipset/zapret-hosts-user.txt $TEMP_DIR_CONF/zapret-hosts-user.txt
-        LIST_EXISTS=1
-    fi
+
     rm -rf /opt/zapret
     rm -rf /opt/zapret-v$(get_latest_version)
     TEMP_DIR_BIN=$(mktemp -d)
@@ -62,16 +52,7 @@ download_zapret()
     echo "Клонирую репозиторий конфигураций..."
     git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
     echo "Клонирование успешно завершено."
-    if [ CONF_EXISTS = 1 ]; then
-        rm -f /opt/zapret/config
-        mv $TEMP_DIR_CONF/config /opt/zapret/config
-    fi
-    if [ LIST_EXISTS = 1 ]; then 
-        rm -f /opt/zapret/ipset/zapret-hosts-user.txt
-        mv $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
-    fi
-    rm -rf $TEMP_DIR_CONF
-    rm -rf $TEMP_DIR_BIN
+
 
 
 }
@@ -178,7 +159,17 @@ install_zapret() {
 }
 
 update_zapret() {
-    
+    LIST_EXISTS=0
+    CONF_EXISTS=0
+    TEMP_DIR_CONF=$(mktemp -d)
+    if [[ -f /opt/zapret/config ]]; then
+        cp -r /opt/zapret/config $TEMP_DIR_CONF/config
+        CONF_EXISTS=1
+    fi
+    if [[ -f /opt/zapret/ipset/zapret-hosts-user.txt ]]; then
+        cp -r /opt/zapret/ipset/zapret-hosts-user.txt $TEMP_DIR_CONF/zapret-hosts-user.txt
+        LIST_EXISTS=1
+    fi 
     if [ $(zapret_update_check) = 0 ]; then
         echo "Актуальная версия уже установлена: нечего обновлять." 
         bash -c 'read -p "Нажмите Enter для продолжения..."' 
@@ -186,6 +177,7 @@ update_zapret() {
         download_zapret || error_exit "не удалось обновить запрет"
         echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
     fi
+    cd /opt/zapret
     sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
     yes "" | ./install_easy.sh
     sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
@@ -200,12 +192,16 @@ update_zapret() {
         rm -f /bin/zapret
         ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     fi
-    rm -f /opt/zapret/config
-    cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
-    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
-    cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
-    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
-    configure_zapret_conf 
+    if [ CONF_EXISTS = 1 ]; then
+        rm -f /opt/zapret/config
+        mv $TEMP_DIR_CONF/config /opt/zapret/config
+    fi
+    if [ LIST_EXISTS = 1 ]; then 
+        rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+        mv $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
+    fi
+    rm -rf $TEMP_DIR_CONF
+    rm -rf $TEMP_DIR_BIN
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
