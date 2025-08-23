@@ -202,6 +202,7 @@ update_zapret() {
     fi
     rm -rf $TEMP_DIR_CONF
     rm -rf $TEMP_DIR_BIN
+    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
