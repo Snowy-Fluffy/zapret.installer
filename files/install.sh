@@ -202,7 +202,12 @@ update_zapret() {
     fi
     rm -rf $TEMP_DIR_CONF
     rm -rf $TEMP_DIR_BIN
+    rm -f /opt/zapret/config
+    cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
+    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
     cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
+    configure_zapret_conf
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
