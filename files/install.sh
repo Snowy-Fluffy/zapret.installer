@@ -69,18 +69,20 @@ install_zapret() {
         echo "Получаю релиз запрета..."
         sleep 2
         mkdir -p /tmp/zapret_download
-        cd /tmp/zapret_download || error_exit "Не удалось перейти в /tmp/zapret_download"
-        if ! curl -L -o https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz; then
+        #cd /tmp/zapret_download || error_exit "Не удалось перейти в /tmp/zapret_download"
+        if ! curl -L -o "/tmp/zapret_download/zapret-bin-openwrt.tar.gz" $(curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*openwrt.*tar.gz" | head -n 1 | cut -d '"' -f 4); then
             rm -rf /tmp/zapret_download
             error_exit "Не удалось получить релиз запрета."
         fi
         mkdir -p /opt/zapret
-        if ! tar -xzf zapret-v71.1.1.tar.gz -C /opt/zapret --strip-components=1; then
+        if ! tar -xzf /tmp/zapret_download/zapret-bin-openwrt.tar.gz -C /opt/zapret --strip-components=1; then
             rm -rf /tmp/zapret_download /opt/zapret
             error_exit "Не удалось разархивировать архив с релизом запрета."
         fi
-        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
-        rm -rf /tmp/zapret_download   
+        rm -rf /tmp/zapret_download  
+        echo "Клонирую репозиторий..."
+        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs 
+
     else
         echo "Клонирую репозиторий..."
         sleep 2
