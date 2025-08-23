@@ -29,24 +29,25 @@ download_zapret()
         LIST_EXISTS=1
     fi
     rm -rf /opt/zapret
+    rm -rf /opt/zapret-v$(get_latest_version)
     TEMP_DIR_BIN=$(mktemp -d)
     if [ SYSTEM = openwrt ]; then
         if ! curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" $(curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*openwrt.*tar.gz" | head -n 1 | cut -d '"' -f 4); then
             rm -rf $TEMP_DIR_BIN
             error_exit "Не удалось получить релиз запрета."
         fi        
-        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/zapret --strip-components=1; then
-            rm -rf $TEMP_DIR_BIN /opt/zapret
+        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/ --strip-components=1; then
+            rm -rf $TEMP_DIR_BIN /opt/zapret-v$(get_latest_version)
             error_exit "Не удалось разархивировать архив с релизом запрета."
         fi
     else
         curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*tar.gz" | grep -v "openwrt" | head -n 1 | cut -d '"' -f 4 | xargs -I {} curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" "{}" || error_exit "не могу получить релиз запрета"
-        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/zapret/; then
-            rm -rf $TEMP_DIR_BIN /opt/zapret
+        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/; then
+            rm -rf $TEMP_DIR_BIN /opt/zapret-v$(get_latest_version)
             error_exit "Не удалось разархивировать архив с релизом запрета."
         fi
     fi
-
+    mv /opt/zapret-v$(get_latest_version) /opt/zapret
     get_latest_version > /opt/zapret-ver
     echo "Клонирую репозиторий конфигураций..."
     git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
