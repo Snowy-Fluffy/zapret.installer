@@ -88,11 +88,11 @@ get_fwtype() {
 cur_conf() {
     cr_cnf="неизвестно"
     if [[ -f /opt/zapret/config ]]; then
-        mkdir -p /tmp/zapret.installer-tmp/
-        cp -r /opt/zapret/config /tmp/zapret.installer-tmp/config
-        sed -i "s/^FWTYPE=.*/FWTYPE=iptables/" /tmp/zapret.installer-tmp/config
+        TEMP_CUR_STR=$(mktemp -d)
+        cp -r /opt/zapret/config $TEMP_CUR_STR/config
+        sed -i "s/^FWTYPE=.*/FWTYPE=iptables/" $TEMP_CUR_STR/config
         for file in /opt/zapret/zapret.cfgs/configurations/*; do
-            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum /tmp/zapret.installer-tmp/config | awk '{print $1}')" ]]; then
+            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum $TEMP_CUR_STR/config | awk '{print $1}')" ]]; then
                 cr_cnf="$(basename "$file")"
                 break
             fi

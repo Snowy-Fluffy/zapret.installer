@@ -1,6 +1,64 @@
 #!/bin/bash
 
 
+remote_latest_version() {
+    rver=$(timeout 5s curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | \
+          grep "tag_name" | \
+          cut -d '"' -f 4 | \
+          sed 's/^v//')
+}
+
+get_latest_version() {
+    if [ -z "$rver" ]; then
+        echo "Неизвестно"
+    else
+        echo "$rver"
+    fi
+}
+
+zapret_update_check()
+{
+    if cmp -s <(get_latest_version) /opt/zapret-ver; then 
+        echo -e "0"
+    else
+        echo -e "1"
+    fi
+
+}
+download_zapret()
+{
+
+    rm -rf /opt/zapret
+    rm -rf /opt/zapret-v$(get_latest_version)
+    TEMP_DIR_BIN=$(mktemp -d)
+    if [ SYSTEM = openwrt ]; then
+        if ! curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" $(curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*openwrt.*tar.gz" | head -n 1 | cut -d '"' -f 4); then
+            rm -rf $TEMP_DIR_BIN
+            error_exit "Не удалось получить релиз запрета."
+        fi        
+        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/ --strip-components=1; then
+            rm -rf $TEMP_DIR_BIN /opt/zapret-v$(get_latest_version)
+            error_exit "Не удалось разархивировать архив с релизом запрета."
+        fi
+    else
+        curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*tar.gz" | grep -v "openwrt" | head -n 1 | cut -d '"' -f 4 | xargs -I {} curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" "{}" || error_exit "не могу получить релиз запрета"
+        if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/; then
+            rm -rf $TEMP_DIR_BIN /opt/zapret-v$(get_latest_version)
+            error_exit "Не удалось разархивировать архив с релизом запрета."
+        fi
+    fi
+    mv /opt/zapret-v$(get_latest_version) /opt/zapret
+    get_latest_version > /opt/zapret-ver
+    echo "Клонирую репозиторий конфигураций..."
+    git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
+    echo "Клонирование успешно завершено."
+
+
+
+}
+
+
+
 
 install_dependencies() {
     kernel="$(uname -s)"
@@ -65,49 +123,7 @@ install_zapret() {
                 ;;
         esac
     fi
-    if [ SYSTEM = openwrt ]; then
-        echo "Получаю релиз запрета..."
-        sleep 2
-        mkdir -p /tmp/zapret_download
-        #cd /tmp/zapret_download || error_exit "Не удалось перейти в /tmp/zapret_download"
-        if ! curl -L -o "/tmp/zapret_download/zapret-bin-openwrt.tar.gz" $(curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*openwrt.*tar.gz" | head -n 1 | cut -d '"' -f 4); then
-            rm -rf /tmp/zapret_download
-            error_exit "Не удалось получить релиз запрета."
-        fi
-        mkdir -p /opt/zapret
-        if ! tar -xzf /tmp/zapret_download/zapret-bin-openwrt.tar.gz -C /opt/zapret --strip-components=1; then
-            rm -rf /tmp/zapret_download /opt/zapret
-            error_exit "Не удалось разархивировать архив с релизом запрета."
-        fi
-        rm -rf /tmp/zapret_download  
-        echo "Клонирую репозиторий..."
-        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs 
-
-    else
-        echo "Клонирую репозиторий..."
-        sleep 2
-        git clone https://github.com/bol-van/zapret /opt/zapret
-        echo "Клонирую репозиторий..."
-        git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
-        echo "Клонирование успешно завершено."
-        rm -rf /opt/zapret/binaries
-        echo -e "\e[45mКлонирую релиз запрета...\e[0m"
-        if [[ ! -d /opt/zapret.installer/zapret.binaries/ ]]; then
-            rm -rf /opt/zapret.installer/zapret.binaries/
-        fi
-        mkdir -p /opt/zapret.installer/zapret.binaries/zapret
-        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz https://github.com/bol-van/zapret/releases/download/v71.4/zapret-v71.4.tar.gz; then
-            rm -rf /opt/zapret /tmp/zapret
-            error_exit "не удалось получить релиз запрета."
-        fi
-        echo "Получение запрета завершено."
-        if ! tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/; then
-            rm -rf /opt/zapret.installer/
-            error_exit "не удалось разархивировать архив с релизом запрета."
-        fi
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4/binaries/ /opt/zapret/binaries
-    fi
-
+    download_zapret
     cd /opt/zapret
     sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
     yes "" | ./install_easy.sh
@@ -143,9 +159,31 @@ install_zapret() {
 }
 
 update_zapret() {
-    if [[ -d /opt/zapret ]]; then
-        cd /opt/zapret && git fetch origin master; git reset --hard origin/master
+    LIST_EXISTS=0
+    CONF_EXISTS=0
+    TEMP_DIR_CONF=$(mktemp -d)
+    if [[ -f /opt/zapret/config ]]; then
+        cp -r /opt/zapret/config $TEMP_DIR_CONF/config
+        CONF_EXISTS=1
     fi
+    if [[ -f /opt/zapret/ipset/zapret-hosts-user.txt ]]; then
+        cp -r /opt/zapret/ipset/zapret-hosts-user.txt $TEMP_DIR_CONF/zapret-hosts-user.txt
+        LIST_EXISTS=1
+    fi 
+    if [ $(zapret_update_check) = 0 ]; then
+        echo "Актуальная версия уже установлена: нечего обновлять." 
+        bash -c 'read -p "Нажмите Enter для продолжения..."' 
+    else
+        download_zapret || error_exit "не удалось обновить запрет"
+        echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
+    fi
+    cd /opt/zapret
+    sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+    yes "" | ./install_easy.sh
+    sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
+
+
+
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
     fi
@@ -154,6 +192,17 @@ update_zapret() {
         rm -f /bin/zapret
         ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     fi
+    if [ CONF_EXISTS = 1 ]; then
+        rm -f /opt/zapret/config
+        mv $TEMP_DIR_CONF/config /opt/zapret/config
+    fi
+    if [ LIST_EXISTS = 1 ]; then 
+        rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+        mv $TEMP_DIR_CONF/zapret-hosts-user.txt /opt/zapret/ipset/zapret-hosts-user.txt
+    fi
+    rm -rf $TEMP_DIR_CONF
+    rm -rf $TEMP_DIR_BIN
+    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
     exec "$0" "$@"
@@ -197,8 +246,12 @@ uninstall_zapret() {
             rm -rf /opt/zapret
             rm -rf /opt/zapret.installer/
             rm -r /bin/zapret
+            rm -f /opt/zapret-ver
             echo "Удаляю zapret..."
             sleep 3
+            TPUT_E
+            echo "Запрет удален"
+            exit
             ;;
         * )
             main_menu
