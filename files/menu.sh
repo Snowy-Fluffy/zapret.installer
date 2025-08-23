@@ -220,15 +220,17 @@ update_zapret_menu(){
             echo -e "\e[1;36m╔════════════════════════════════════╗"
             echo -e "║          Обновление Запрета        ║"
             echo -e "╚════════════════════════════════════╝\e[0m"
-            echo -e "  \e[1;32m1)\e[0m Обновить \e[32mскрипт\e[0m"
-            echo -e "  \e[1;31m2)\e[0m Выйти в меню"
+            echo -e "  \e[1;33m1)\e[0m Обновить \e[33mzapret и скрипт\e[0m \e[2m(не рекомендуется)\e[0m"
+            echo -e "  \e[1;32m2)\e[0m Обновить только \e[32mскрипт\e[0m"
+            echo -e "  \e[1;31m3)\e[0m Выйти в меню"
             echo ""
             echo -e "\e[1;96m Сделано с любовью \e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
             echo ""
             read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
             case "$CHOICE" in
-                1) update_installed_script;;
-                2) main_menu;;
+                1) update_zapret;;
+                2) update_installed_script;;
+                3) main_menu;;
                 *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
             esac
         done
