@@ -94,16 +94,16 @@ install_zapret() {
             rm -rf /opt/zapret.installer/zapret.binaries/
         fi
         mkdir -p /opt/zapret.installer/zapret.binaries/zapret
-        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz https://github.com/bol-van/zapret/releases/download/v71.1.1/zapret-v71.1.1.tar.gz; then
+        if ! curl -L -o /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz https://github.com/bol-van/zapret/releases/download/v71.4/zapret-v71.4.tar.gz; then
             rm -rf /opt/zapret /tmp/zapret
             error_exit "не удалось получить релиз запрета."
         fi
         echo "Получение запрета завершено."
-        if ! tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/; then
+        if ! tar -xzf /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz -C /opt/zapret.installer/zapret.binaries/zapret/; then
             rm -rf /opt/zapret.installer/
             error_exit "не удалось разархивировать архив с релизом запрета."
         fi
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.1.1/binaries/ /opt/zapret/binaries
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz/binaries/ /opt/zapret/binaries
     fi
 
     cd /opt/zapret
