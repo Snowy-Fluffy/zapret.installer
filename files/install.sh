@@ -1,11 +1,22 @@
 #!/bin/bash
 
-get_latest_version() {
-    curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | \
-    grep "tag_name" | \
-    cut -d '"' -f 4 | \
-    sed 's/^v//'
+
+remote_latest_version() {
+    rver=$(timeout 5s curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | \
+          grep "tag_name" | \
+          cut -d '"' -f 4 | \
+          sed 's/^v//')
 }
+
+get_latest_version() {
+    if [ -z "$rver" ]; then
+        echo "неизвестно"
+    else
+        echo "$rver"
+    fi
+}
+}
+
 zapret_update_check()
 {
     if cmp -s <(get_latest_version) /opt/zapret-ver; then 
@@ -170,7 +181,8 @@ install_zapret() {
 update_zapret() {
     
     if [ $(zapret_update_check) = 0 ]; then
-        echo "Актуальная версия уже установлена: нечего обновлять." bash -c 'read -p "Нажмите Enter для продолжения..."' 
+        echo "Актуальная версия уже установлена: нечего обновлять." 
+        bash -c 'read -p "Нажмите Enter для продолжения..."' 
     else
         download_zapret || error_exit "не удалось обновить запрет"
         echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"

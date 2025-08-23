@@ -199,6 +199,9 @@ update_zapret_menu(){
             clear
             echo -e "\e[1;36m╔════════════════════════════════════╗"
             echo -e "║        🔄 Обновление Запрета       ║"
+            echo -e "║         Текущая версия: $(if [ -f /opt/zapret-ver ]; then cat /opt/zapret-ver; else echo "Неизвестно";fi)       ║"
+
+            echo -e "║       Последняя версия: $(get_latest_version)       ║"
             echo -e "╚════════════════════════════════════╝\e[0m"
             echo -e "  \e[1;33m1)\e[0m 🔧 Обновить \e[33mzapret и скрипт\e[0m \e[2m(не рекомендуется)\e[0m"
             echo -e "  \e[1;32m2)\e[0m 📜 Обновить только \e[32mскрипт\e[0m"
@@ -219,6 +222,11 @@ update_zapret_menu(){
             clear
             echo -e "\e[1;36m╔════════════════════════════════════╗"
             echo -e "║          Обновление Запрета        ║"
+
+            echo -e "║         Текущая версия: $(if [ -f /opt/zapret-ver ]; then cat /opt/zapret-ver; else echo "Неизвестно";fi)       ║"
+
+            echo -e "║       Последняя версия: $(get_latest_version)       ║"
+
             echo -e "╚════════════════════════════════════╝\e[0m"
             echo -e "  \e[1;33m1)\e[0m Обновить \e[33mzapret и скрипт\e[0m \e[2m(не рекомендуется)\e[0m"
             echo -e "  \e[1;32m2)\e[0m Обновить только \e[32mскрипт\e[0m"
