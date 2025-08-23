@@ -103,7 +103,7 @@ install_zapret() {
             rm -rf /opt/zapret.installer/
             error_exit "не удалось разархивировать архив с релизом запрета."
         fi
-        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4.tar.gz/binaries/ /opt/zapret/binaries
+        cp -r /opt/zapret.installer/zapret.binaries/zapret/zapret-v71.4/binaries/ /opt/zapret/binaries
     fi
 
     cd /opt/zapret
