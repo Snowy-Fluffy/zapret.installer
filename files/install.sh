@@ -15,7 +15,6 @@ get_latest_version() {
         echo "$rver"
     fi
 }
-}
 
 zapret_update_check()
 {
