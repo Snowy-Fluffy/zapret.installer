@@ -10,7 +10,12 @@ remote_latest_version() {
 
 get_latest_version() {
     if [ -z "$rver" ]; then
-        echo "Неизвестно"
+        rver=$(timeout 10s curl -s -I https://github.com/bol-van/zapret/releases/latest | grep -i "location:" | cut -d' ' -f2 | tr -d '\r' | grep -o "tag/v[0-9.]\+" | cut -d'/' -f2 | sed 's/^v//')
+        if [ -z "$rver" ]; then
+            error_exit "не удалось определить последнюю версию запрета. Проверьте соединение с сетью."
+        else
+            echo "$rver"
+        fi
     else
         echo "$rver"
     fi
