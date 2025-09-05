@@ -249,22 +249,27 @@ delete_from_zapret() {
     main_menu
 }
 
+
 search_in_zapret() {
     read -p "Введите домен или IP-адрес для поиска в хостлисте (Enter и пустой ввод для отмены): " keyword
 
     if [[ -z "$keyword" ]]; then
         main_menu
+        return
     fi
 
-    matches=$(grep "$keyword" "/opt/zapret/ipset/zapret-hosts-user.txt")
+    echo
+    echo "🔍 Результаты поиска по запросу: $keyword"
+    echo "----------------------------------------"
 
-    if [[ -n "$matches" ]]; then
-        echo "Найденные записи:"
-        echo "$matches"
-        bash -c 'read -p "Нажмите Enter для продолжения..."'
+    if grep -i --color=never -F "$keyword" "/opt/zapret/ipset/zapret-hosts-user.txt"; then
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для продолжения..."
     else
-        echo "Совпадений не найдено."
-        sleep 2
-        main_menu
+        echo "❌ Совпадений не найдено."
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для возврата в меню..."
     fi
-} 
+
+    main_menu
+}
