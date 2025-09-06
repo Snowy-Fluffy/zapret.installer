@@ -30,6 +30,8 @@ zapret
 - Alt Linux
 - Void Linux
 - Gentoo Linux
+- Redos Linux
+- Oracle Linux
 - OpenSUSE
 - Aipline Linux
 - OpenWrt

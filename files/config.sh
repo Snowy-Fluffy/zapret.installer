@@ -197,6 +197,54 @@ configure_zapret_list() {
     main_menu
 }
 
+configure_custom_conf_path() {
+    echo -e "\e[36mУкажите путь к стратегии. (Enter и пустой ввод для отмены)\e[0m"
+    read -rp "Путь к стратегии (Пример: /home/user/folder/123): " CONFIG_PATH
+
+    if [[ -z "$CONFIG_PATH" ]]; then
+        main_menu
+    fi
+
+    if [[ ! -f "$CONFIG_PATH" ]]; then
+        echo -e "\e[31mФайл не найден: $CONFIG_PATH\e[0m"
+        sleep 2
+        main_menu
+    fi
+
+    manage_service stop
+    rm -f /opt/zapret/config
+    cp -r -- "$CONFIG_PATH" /opt/zapret/config || error_exit "не удалось скопировать стратегию из указанного пути"
+    get_fwtype
+    sed -i "s/^FWTYPE=.*/FWTYPE=$FWTYPE/" /opt/zapret/config
+    echo -e "\e[32mСтратегия установлена из: $CONFIG_PATH\e[0m"
+    manage_service start
+    sleep 2
+    main_menu
+}
+
+configure_custom_list_path() {
+    echo -e "\e[36mУкажите путь к хостлисту. (Enter и пустой ввод для отмены)\e[0m"
+    read -rp "Путь к хостлисту: " LIST_PATH
+
+    if [[ -z "$LIST_PATH" ]]; then
+        main_menu
+    fi
+
+    if [[ ! -f "$LIST_PATH" ]]; then
+        echo -e "\e[31mФайл не найден: $LIST_PATH\e[0m"
+        sleep 2
+        main_menu
+    fi
+
+    manage_service stop
+    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    cp -r -- "$LIST_PATH" /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось скопировать хостлист из указанного пути"
+    echo -e "\e[32mХостлист установлен из: $LIST_PATH\e[0m"
+    manage_service start
+    sleep 2
+    main_menu
+}
+
 add_to_zapret() {
     read -p "Введите IP-адреса или домены для добавления в лист (разделяйте пробелами, запятыми или |)(Enter и пустой ввод для отмены): " input
     
