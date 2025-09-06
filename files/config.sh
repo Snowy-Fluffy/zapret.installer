@@ -88,11 +88,11 @@ get_fwtype() {
 cur_conf() {
     cr_cnf="неизвестно"
     if [[ -f /opt/zapret/config ]]; then
-        mkdir -p /tmp/zapret.installer-tmp/
-        cp -r /opt/zapret/config /tmp/zapret.installer-tmp/config
-        sed -i "s/^FWTYPE=.*/FWTYPE=iptables/" /tmp/zapret.installer-tmp/config
+        TEMP_CUR_STR=$(mktemp -d)
+        cp -r /opt/zapret/config $TEMP_CUR_STR/config
+        sed -i "s/^FWTYPE=.*/FWTYPE=iptables/" $TEMP_CUR_STR/config
         for file in /opt/zapret/zapret.cfgs/configurations/*; do
-            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum /tmp/zapret.installer-tmp/config | awk '{print $1}')" ]]; then
+            if [[ -f "$file" && "$(sha256sum "$file" | awk '{print $1}')" == "$(sha256sum $TEMP_CUR_STR/config | awk '{print $1}')" ]]; then
                 cr_cnf="$(basename "$file")"
                 break
             fi
@@ -249,22 +249,27 @@ delete_from_zapret() {
     main_menu
 }
 
+
 search_in_zapret() {
     read -p "Введите домен или IP-адрес для поиска в хостлисте (Enter и пустой ввод для отмены): " keyword
 
     if [[ -z "$keyword" ]]; then
         main_menu
+        return
     fi
 
-    matches=$(grep "$keyword" "/opt/zapret/ipset/zapret-hosts-user.txt")
+    echo
+    echo "🔍 Результаты поиска по запросу: $keyword"
+    echo "----------------------------------------"
 
-    if [[ -n "$matches" ]]; then
-        echo "Найденные записи:"
-        echo "$matches"
-        bash -c 'read -p "Нажмите Enter для продолжения..."'
+    if grep -i --color=never -F "$keyword" "/opt/zapret/ipset/zapret-hosts-user.txt"; then
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для продолжения..."
     else
-        echo "Совпадений не найдено."
-        sleep 2
-        main_menu
+        echo "❌ Совпадений не найдено."
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для возврата в меню..."
     fi
-} 
+
+    main_menu
+}

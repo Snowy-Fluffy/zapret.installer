@@ -30,4 +30,5 @@ check_tput
 $TPUT_B
 check_fs
 detect_init
+remote_latest_version
 main_menu
