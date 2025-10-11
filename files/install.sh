@@ -151,7 +151,7 @@ install_zapret() {
             reboot
             ;;
         [Nn]* )
-            TPUT_E
+            $TPUT_E
             exit 1
             ;;
         * )
@@ -259,8 +259,8 @@ uninstall_zapret() {
             rm -f /opt/zapret-ver
             echo "Удаляю zapret..."
             sleep 3
-            TPUT_E
             echo "Запрет удален"
+            $TPUT_E
             exit
             ;;
         * )

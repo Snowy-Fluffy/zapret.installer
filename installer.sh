@@ -14,7 +14,7 @@ install_dependencies() {
             case "$1" in
                 arch|artix|cachyos|endeavouros|manjaro|garuda) echo "$SUDO pacman -Syu --noconfirm && $SUDO pacman -S --noconfirm --needed git" ;;
                 debian|ubuntu|mint) echo "$SUDO apt update -y && $SUDO apt install -y git" ;;
-                fedora|almalinux|rocky|rhel|centos|oracle|redos) echo "if command -v dnf >/dev/null 2>&1; then $SUDO dnf check-update -y && $SUDO dnf install -y git; else $SUDO yum makecache -y && $SUDO yum install -y git; fi" ;;
+                fedora|almalinux|rocky|rhel|centos|oracle|redos) echo "if command -v dnf >/dev/null 2>&1; then $SUDO dnf update -y && $SUDO dnf install -y git; else $SUDO yum makecache -y && $SUDO yum install -y git; fi" ;;
                 void)      echo "$SUDO xbps-install -S && $SUDO xbps-install -y git" ;;
                 gentoo)    echo "$SUDO emerge --sync --quiet && $SUDO emerge --ask=n dev-vcs/git app-shells/bash" ;;
                 opensuse)  echo "$SUDO zypper refresh && $SUDO zypper install git" ;;
