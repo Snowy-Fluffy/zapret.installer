@@ -111,6 +111,30 @@ cur_list() {
         done
     fi
 }
+game_mode_check() {
+    if [ ! -f "/opt/zapret/ipset/ipset-game.txt" ]; then
+        touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось создать ipset для игрвого режима"
+    fi
+    
+    if grep -q "^0\.0\.0\.0/0$" /opt/zapret/ipset/ipset-game.txt; then
+        game_mode_status="включен"
+    else
+        game_mode_status="выключен"
+    fi
+}
+
+toggle_game_mode() {
+    game_mode_check
+    
+    if [[ $game_mode_status == "включен" ]]; then
+        rm -f /opt/zapret/ipset/ipset-game.txt
+        touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось создать ipset для игрвого режима"
+    else
+        echo "0.0.0.0/0" >> /opt/zapret/ipset/ipset-game.txt
+    fi
+    manage_service restart
+    sleep 2
+}
 
 configure_zapret_conf() {
     if [[ ! -d /opt/zapret/zapret.cfgs ]]; then

@@ -31,7 +31,7 @@ get_latest_version() {
 #    fi
 #
 #}
-download_zapret()
+download_zapret_release()
 {
 
     rm -rf /opt/zapret
@@ -56,14 +56,23 @@ download_zapret()
     mv /opt/zapret-v$(get_latest_version) /opt/zapret
     get_latest_version > /opt/zapret-ver
     echo "Клонирую репозиторий конфигураций..."
-    git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs
+    git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs || error_exit "не удалось получить репозиторий конфигураций. Вероятно это сетевая ошибка, попробуйте снова."
     echo "Клонирование успешно завершено."
 
 
 
 }
 
-
+download_zapret_git() {
+    rm -rf /opt/zapret
+    rm -rf /opt/zapret-v$(get_latest_version)
+    echo "Клонирую репозиторий bol-van/zapret..."
+    git clone https://github.com/bol-van/zapret /opt/zapret || error_exit "не удалось получить запрет. Вероятно это сетевая ошибка, попробуйте снова."
+    echo "git" > /opt/zapret-ver
+    echo "Клонирую репозиторий конфигураций..."
+    git clone https://github.com/Snowy-Fluffy/zapret.cfgs /opt/zapret/zapret.cfgs || error_exit "не удалось получить репозиторий конфигураций. Вероятно это сетевая ошибка, попробуйте снова."
+    echo "Клонирование успешно завершено."
+}
 
 
 install_dependencies() {
@@ -107,7 +116,7 @@ install_dependencies() {
     fi
 }
 
-install_zapret() {
+install_zapret_release() {
     install_dependencies
     if [[ $dir_exists == true ]]; then
         read -p "На вашем компьютере был найден запрет (/opt/zapret). Для продолжения его необходимо удалить. Вы действительно хотите удалить запрет (/opt/zapret) и продолжить? (y/N): " answer
@@ -129,7 +138,7 @@ install_zapret() {
                 ;;
         esac
     fi
-    download_zapret
+    download_zapret_release
     cd /opt/zapret
     sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
     yes "" | ./install_easy.sh
@@ -137,7 +146,67 @@ install_zapret() {
     rm -f /bin/zapret
     rm -f /opt/zapret/config
     cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
+    cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
+    cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
+    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
+    ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
+    if [[ INIT_SYSTEM = systemd ]]; then
+        systemctl daemon-reload
+    fi
+    if [[ INIT_SYSTEM = runit ]]; then
+        read -p "Для окончания установки необходимо перезапустить ваше устройство. Перезапустить его сейчас? (Y/n): " answer
+        case "$answer" in
+        [Yy]* )
+            reboot
+            ;;
+        [Nn]* )
+            $TPUT_E
+            exit 1
+            ;;
+        * )
+            reboot
+            ;;
+    esac
+    else
+        manage_service restart
+        configure_zapret_conf
+    fi
+}
+install_zapret_git() {
+    install_dependencies
+    if [[ $dir_exists == true ]]; then
+        read -p "На вашем компьютере был найден запрет (/opt/zapret). Для продолжения его необходимо удалить. Вы действительно хотите удалить запрет (/opt/zapret) и продолжить? (y/N): " answer
+        case "$answer" in
+            [Yy]* )
+                if [[ -f /opt/zapret/uninstall_easy.sh ]]; then
+                    cd /opt/zapret
+                    sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+                    yes "" | ./uninstall_easy.sh
+                    sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
+                fi
+                rm -rf /opt/zapret
+                echo "Удаляю zapret..."
+                cd /
+                sleep 3
+                ;;
+            * )
+                main_menu
+                ;;
+        esac
+    fi
+    download_zapret_git
+    cd /opt/zapret
+    sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+    yes "" | ./install_easy.sh
+    sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
+    rm -f /bin/zapret
+    rm -f /opt/zapret/config
+    cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
+    cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
+    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
     cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
     ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
@@ -164,6 +233,7 @@ install_zapret() {
     fi
 }
 
+
 update_zapret() {
     LIST_EXISTS=0
     CONF_EXISTS=0
@@ -180,14 +250,27 @@ update_zapret() {
     #    echo "Актуальная версия уже установлена: нечего обновлять." 
     #    bash -c 'read -p "Нажмите Enter для продолжения..."' 
     
-    download_zapret || error_exit "не удалось обновить запрет"
-    echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
-    cd /opt/zapret
-    sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
-    yes "" | ./install_easy.sh
-    sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
-
-
+    if [ -f /opt/zapret-ver ]; then
+        #cat /opt/zapret-ver | tr -d '[:space:]' - useful
+        if [ -z $(cat /opt/zapret-ver) ] || [ $(cat /opt/zapret-ver) != "git" ]; then
+            download_zapret || error_exit "не удалось обновить запрет"
+            echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
+            cd /opt/zapret
+            sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+            yes "" | ./install_easy.sh
+            sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
+        else
+            cd /opt/zapret/ && git fetch origin master; git reset --hard origin/master || error_exit "не удалось обновить zapret с помощью git. Попробуйте снова, вероятно это сетевая ошибка. Если не помогло - переустановите zapret."
+            echo -e "Репозиторий запрета был обновлен."
+        fi
+    else
+        download_zapret || error_exit "не удалось обновить zapret"
+        echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
+        cd /opt/zapret
+        sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
+        yes "" | ./install_easy.sh
+        sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
+    fi
 
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
@@ -209,9 +292,11 @@ update_zapret() {
     rm -rf $TEMP_DIR_BIN
     rm -f /opt/zapret/config
     cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
+    cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+    touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
-    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
+    cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать discord ipset"
     configure_zapret_conf
     manage_service restart
     bash -c 'read -p "Нажмите Enter для продолжения..."'
