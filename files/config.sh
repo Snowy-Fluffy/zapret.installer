@@ -321,3 +321,57 @@ search_in_zapret() {
 
     main_menu
 }
+
+auto_check_strategies() {
+    local STRATS_DIR="/opt/zapret/zapret.cfgs/configurations"
+    local CHECK_DOMAINS=("discord.com" "youtube.com" "rutracker.org")
+    local SUMMARY=() 
+
+    echo -e "\e[1;36m🚀 Начинаю перебирать стратегии...\e[0m"
+    echo -e "\e[1;36mЭто может занять... какое-то время\e[0m"
+
+    local files=($(ls "$STRATS_DIR"))
+
+    for strat in "${files[@]}"; do
+        echo -e "\n\e[1;33m🔍 Проверяю: $strat\e[0m"
+        
+        cp "$STRATS_DIR/$strat" /opt/zapret/config
+        get_fwtype
+        sed -i "s/^FWTYPE=.*/FWTYPE=$FWTYPE/" /opt/zapret/config
+
+        manage_service restart > /dev/null 2>&1
+        sleep 2
+
+        local strat_works_for=""
+        local success_count=0
+
+        for domain in "${CHECK_DOMAINS[@]}"; do
+            echo -n "   - $domain: "
+            if curl -s -I -m 5 "https://$domain" > /dev/null 2>&1; then
+                echo -e "\e[1;32mOK\e[0m"
+                strat_works_for+="$domain "
+                success_count=$((success_count + 1))
+            else
+                echo -e "\e[1;31mFAIL\e[0m"
+            fi
+        done
+
+        if [ $success_count -gt 0 ]; then
+            SUMMARY+=("\e[1;32m[+]\e[0m \e[1;37m$strat\e[0m: работает для -> \e[1;36m$strat_works_for\e[0m")
+        else
+            SUMMARY+=("\e[1;31m[-]\e[0m \e[1;30m$strat\e[0m: ничего не пробила")
+        fi
+    done
+
+    clear
+    echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
+    echo -e "║          📊 ИТОГИ АВТОПОДБОРА                ║"
+    echo -e "╚══════════════════════════════════════════════╝\e[0m"
+    
+    for line in "${SUMMARY[@]}"; do
+        echo -e "$line"
+    done
+    
+    read -rp "Нажмите Enter для возврата в меню..."
+    main_menu
+}
