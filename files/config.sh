@@ -296,6 +296,36 @@ add_to_zapret() {
     sleep 2
     main_menu
 }
+edit_cust_list() {
+    if [ -e "/opt/zapret/zapret.cfgs/lists/list-custom.txt" ]; then
+        open_editor /opt/zapret/zapret.cfgs/lists/list-custom.txt
+        echo "Хостлист был отредактирован"
+        sleep 3
+        main_menu
+    else
+        touch /opt/zapret/zapret.cfgs/lists/list-custom.txt
+        open_editor /opt/zapret/zapret.cfgs/lists/list-custom.txt
+        echo "Хостлист был отредактирован"
+        sleep 3
+        main_menu
+    fi
+}
+edit_cust_conf() {
+    if [ -e "/opt/zapret/zapret.cfgs/configurations/conf-custom" ]; then
+        open_editor /opt/zapret/zapret.cfgs/configurations/conf-custom
+        echo "Стратегия была отредактирован"
+        sleep 3
+        main_menu
+    else
+        cp -r /opt/zapret/config.default /opt/zapret/zapret.cfgs/configurations/conf-custom 
+        open_editor /opt/zapret/zapret.cfgs/configurations/conf-custom
+        echo "Стратегия была отредактирован"
+        sleep 3
+        main_menu
+    fi
+}
+    
+    
 
 delete_from_zapret() {
     read -p "Введите IP-адреса или домены для удаления из листа (разделяйте пробелами, запятыми или |)(Enter и пустой ввод для отмены): " input
@@ -492,11 +522,49 @@ check_conf() {
     if [[ ${#configs[@]} -eq 0 ]]; then
         error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
     fi
+    echo ""
+    echo -e "\e[36mСписок всех стратегий:\e[0m"
+    for i in "${!configs[@]}"; do
+        printf "  %2d. %s\n" $((i+1)) "${configs[$i]}"
+    done
+    echo ""
+    echo -e "\e[33mВведите номера стратегий, которые нужно исключить из проверки (через пробел).\nНапример: 2 5 8\e[0m"
+    echo -e "\e[33mОставьте пустым, чтобы проверить все стратегии.\e[0m"
+    read -p "Номера для исключения: " exclude_nums
+    excluded_configs=()
+    if [[ -n "$exclude_nums" ]]; then
+        for num in $exclude_nums; do
+            index=$((num-1))
+            if [[ $index -ge 0 ]] && [[ $index -lt ${#configs[@]} ]]; then
+                excluded_configs+=("${configs[$index]}")
+                echo -e "\e[31mИсключаем стратегию: ${configs[$index]}\e[0m"
+            else
+                echo -e "\e[31mНеверный номер: $num\e[0m"
+            fi
+        done
+        filtered_configs=()
+        for config in "${configs[@]}"; do
+            exclude=0
+            for excl in "${excluded_configs[@]}"; do
+                if [[ "$config" == "$excl" ]]; then
+                    exclude=1
+                    break
+                fi
+            done
+            if [[ $exclude -eq 0 ]]; then
+                filtered_configs+=("$config")
+            fi
+        done
+        configs=("${filtered_configs[@]}")
+    fi
+    if [[ ${#configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mВсе стратегии исключены, нечего проверять\e[0m"
+    fi
+    echo -e "\e[33mБудет проверено стратегий: ${#configs[@]}\e[0m"
+    echo ""
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
     echo -e "\e[36mЭто может занять много времени. Чтобы выйти, вы можете воспользоваться комбинацией клавиш CTRL+C. Продолжаю через 5 секунд...\e[0m"
     sleep 5
-    echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
-    echo ""
     stats_file="/tmp/zapret_final_stats_$$.txt"
     > "$stats_file"
     local best_config=""

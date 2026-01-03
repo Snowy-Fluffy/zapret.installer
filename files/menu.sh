@@ -109,6 +109,9 @@ change_configuration() {
         echo -e "  \e[1;34m8)\e[0m Установить хостлист из файла (путь)"
         echo -e "  \e[1;34m9)\e[0m Редактировать стратегию напрямую"
         echo -e "  \e[1;34m10)\e[0m Редактировать хостлист напрямую"
+        echo -e "  \e[1;34m11)\e[0m Создать/Редактировать кастомный хостлист"
+        echo -e "  \e[1;34m12)\e[0m Создать/Редактировать кастомную стратегию"
+
         echo ""
         echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
         echo ""
@@ -125,6 +128,8 @@ change_configuration() {
             8) configure_custom_list_path ;;
             9) open_editor /opt/zapret/config ;;
             10) open_editor /opt/zapret/ipset/zapret-hosts-user.txt ;;
+            11) edit_cust_list;;
+            12) edit_cust_conf;;
             0) main_menu ;;
             *) echo -e "\e[1;31mНеверный ввод! Попробуйте снова.\e[0m"; sleep 2 ;;
         esac
@@ -135,7 +140,7 @@ configure_zapret_menu(){
         clear
         cur_conf
         echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
-        echo -e "║        Управление стратегиями Запрета      ║"
+        echo -e "║         Управление стратегиями Запрета       ║"
         echo -e "╚══════════════════════════════════════════════╝\e[0m"
         echo -e "  \e[1;33m Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
         echo -e "  \e[1;31m0)\e[0m Выйти в меню"
