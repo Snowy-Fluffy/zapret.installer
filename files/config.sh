@@ -458,7 +458,25 @@ apply_config() {
 }
 
 check_conf() {
-    configure_zapret_list
+    echo -e "\e[36mВыберите хостлист для тестирования (можно поменять в любой момент, запустив Меню управления запретом еще раз):\e[0m"
+    PS3="Введите номер листа (по умолчанию для тестирования 'list-simple.txt'): "
+
+    select LIST in $(for f in /opt/zapret/zapret.cfgs/lists/list*; do echo "$(basename "$f")"; done) "Отмена"; do
+        if [[ "$LIST" == "Отмена" ]]; then
+            main_menu
+        elif [[ -n "$LIST" ]]; then
+            LIST_PATH="/opt/zapret/zapret.cfgs/lists/$LIST"
+            rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+            cp "$LIST_PATH" /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось скопировать хостлист"
+            echo -e "\e[32mХостлист '$LIST' установлен.\e[0m"
+
+            sleep 2
+            break
+        else
+            echo -e "\e[31mНеверный выбор, попробуйте снова.\e[0m"
+        fi
+    done
+    manage_service restart
     check_list
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
     echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
