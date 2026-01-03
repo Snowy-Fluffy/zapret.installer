@@ -73,19 +73,29 @@ try_again() {
 } 
 open_editor() {
     local file_path="$1"
-    if [ ! -f "$1" ]; then
-        error_exit "заданного файла не существует"
-    fi
     
-    if [ -z "$EDITOR" ] || [ ! -n "$EDITOR" ]; then
-        echo "Переменная EDITOR пуста"
-        echo ""
-        echo "Продолжаю через 5 секунд..."
-        sleep 5
-        main_menu
+    if [ ! -f "$file_path" ]; then
+        error_exit "Заданного файла не существует"
     fi
-    
-    "$EDITOR" "$1"
+    local editor="nano"
+    if ! command -v "$editor" >/dev/null 2>&1; then
+        echo "Редактор '$editor' не найден в системе"
+        
+        if command -v "vim" >/dev/null 2>&1; then
+            editor="vim"
+        elif command -v "vi" >/dev/null 2>&1; then
+            editor="vi"
+        else
+            echo "Не найдено ни одного текстового редактора"
+            echo "Установите nano, vim или другой редактор"
+            echo ""
+            echo "Возврат в главное меню через 5 секунд..."
+            sleep 5
+            main_menu
+            return
+        fi
+    fi
+    "$editor" "$file_path"
     main_menu
 }
 fast_exit(){
