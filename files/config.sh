@@ -478,6 +478,10 @@ check_conf() {
     done
     manage_service restart
     check_list
+    configs=($(ls /opt/zapret/zapret.cfgs/configurations/ | sort))
+    if [[ ${#configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
+    fi
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
     echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
     echo ""
@@ -565,6 +569,10 @@ check_conf_simple() {
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
     cp -r /opt/zapret/zapret.cfgs/lists/list-simple.txt /opt/zapret/ipset/zapret-hosts-user.txt
     check_list
+    configs=($(ls /opt/zapret/zapret.cfgs/configurations/ | sort))
+    if [[ ${#configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
+    fi
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
     echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
     echo ""
