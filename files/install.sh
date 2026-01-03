@@ -292,7 +292,7 @@ update_zapret() {
     rm -rf $TEMP_DIR_BIN
     rm -f /opt/zapret/config
     cp -r /opt/zapret/zapret.cfgs/configurations/general /opt/zapret/config || error_exit "не удалось автоматически скопировать конфиг"
-    cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
+    cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake/ || error_exit "не удалось автоматически скопировать fake bin"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
     touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"

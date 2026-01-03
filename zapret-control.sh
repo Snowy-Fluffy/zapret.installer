@@ -25,6 +25,7 @@ fi
 if [[ $EUID -ne 0 ]]; then
     exec $SUDO "$0" "$@"
 fi
+trap fast_exit SIGINT
 check_openwrt
 check_tput
 $TPUT_B

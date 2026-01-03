@@ -107,6 +107,8 @@ change_configuration() {
         echo -e "  \e[1;34m6)\e[0m Найти IP или домены в листе"
         echo -e "  \e[1;34m7)\e[0m Установить стратегию из файла (путь)"
         echo -e "  \e[1;34m8)\e[0m Установить хостлист из файла (путь)"
+        echo -e "  \e[1;34m9)\e[0m Редактировать стратегию напрямую"
+        echo -e "  \e[1;34m10)\e[0m Редактировать хостлист напрямую"
         echo ""
         echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
         echo ""
@@ -114,15 +116,63 @@ change_configuration() {
         read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
         case "$CHOICE" in
             1) toggle_game_mode ;;
-            2) configure_zapret_conf ;;
+            2) configure_zapret_menu ;;
             3) configure_zapret_list ;;
             4) add_to_zapret ;;
             5) delete_from_zapret ;;
             6) search_in_zapret ;;
             7) configure_custom_conf_path ;;
             8) configure_custom_list_path ;;
+            9) open_editor /opt/zapret/config ;;
+            10) open_editor /opt/zapret/ipset/zapret-hosts-user.txt ;;
             0) main_menu ;;
             *) echo -e "\e[1;31mНеверный ввод! Попробуйте снова.\e[0m"; sleep 2 ;;
+        esac
+    done
+}
+configure_zapret_menu(){
+    while true; do
+        clear
+        cur_conf
+        echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
+        echo -e "║        Управление стратегиями Запрета      ║"
+        echo -e "╚══════════════════════════════════════════════╝\e[0m"
+        echo -e "  \e[1;33m Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
+        echo -e "  \e[1;31m0)\e[0m Выйти в меню"
+        echo -e "  \e[1;34m1)\e[0m Выбрать стратегию вручную"
+        echo -e "  \e[1;34m2)\e[0m Подобрать стратегию автоматически"
+        echo ""
+        echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+        read -p $'\e[1;36m Выберите действие: \e[0m' CHOICE
+        case "$CHOICE" in
+            1) configure_zapret_conf;;
+            2) auto_conf_check;;
+            0) main_menu;;
+            *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
+        esac
+    done
+}
+auto_conf_check(){
+    while true; do
+        clear
+        cur_conf
+        echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
+        echo -e "║        Управление стратегиями Запрета      ║"
+        echo -e "╚══════════════════════════════════════════════╝\e[0m"
+        echo -e "  \e[1;33m Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
+        echo -e "  \e[1;31m0)\e[0m Выйти в меню"
+        echo -e "  \e[1;34m1)\e[0m Подобрать стратегию автоматически"
+        echo -e "  \e[1;34m2)\e[0m Подобрать стратегию автоматически по кастомному листу"
+        echo ""
+        echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+        echo ""
+        read -p $'\e[1;36m Выберите действие: \e[0m' CHOICE
+        case "$CHOICE" in
+            1) check_conf_simple;;
+            2) check_conf;;
+            0) main_menu;;
+            *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
         esac
     done
 }

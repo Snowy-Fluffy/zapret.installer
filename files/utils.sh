@@ -71,3 +71,25 @@ try_again() {
 
     (( success == 0 )) && error_exit "$error_message"
 } 
+open_editor() {
+    local file_path="$1"
+    if [ ! -f "$1" ]; then
+        error_exit "заданного файла не существует"
+    fi
+    
+    if [ -z "$EDITOR" ] || [ ! -n "$EDITOR" ]; then
+        echo "Переменная EDITOR пуста"
+        echo ""
+        echo "Продолжаю через 5 секунд..."
+        sleep 5
+        main_menu
+    fi
+    
+    "$EDITOR" "$1"
+    main_menu
+}
+fast_exit(){
+    $TPUT_E
+    echo "Выход по запросу пользователя"
+    exit 1
+}
