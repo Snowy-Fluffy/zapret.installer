@@ -355,12 +355,7 @@ test_domain() {
     domain=$(echo "$domain" | sed 's/#.*//' | xargs)
     [[ -z "$domain" ]] && return
     if [[ "$domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        ping_result=$(ping -c 2 -W 2 "$domain" 2>/dev/null | grep -E "rtt min/avg/max/mdev" | awk -F'/' '{print $5}')
-        if [[ -n "$ping_result" ]]; then
-            results=("${ping_result}ms" "N/A" "N/A" "N/A")
-        else
-            results=("FAIL" "N/A" "N/A" "N/A")
-        fi
+        test_ip "$domain"
     else
         ping_result=$(ping -c 2 -W 2 "$domain" 2>/dev/null | grep -E "rtt min/avg/max/mdev" | awk -F'/' '{print $5}')
         if [[ -n "$ping_result" ]]; then
@@ -386,6 +381,18 @@ test_domain() {
         else
             results+=("FAIL")
         fi
+    fi
+    echo "${results[@]}"
+}
+
+test_ip() {
+    local ip="$1"
+    local results=()
+    ping_result=$(ping -c 2 -W 2 "$ip" 2>/dev/null | grep -E "rtt min/avg/max/mdev" | awk -F'/' '{print $5}')
+    if [[ -n "$ping_result" ]]; then
+        results=("${ping_result}ms" "N/A" "N/A" "N/A")
+    else
+        results=("FAIL" "N/A" "N/A" "N/A")
     fi
     echo "${results[@]}"
 }
@@ -425,10 +432,15 @@ test_all_domains() {
         total=$((total + 1))
         results=($(test_domain "$line"))
         local is_available=0
-        if [[ "${results[0]}" != "FAIL" ]] && \
-           ([[ "${results[2]}" =~ ^TLS1\.2:[23] ]] || [[ "${results[3]}" =~ ^TLS1\.3:[23] ]]); then
+        if [[ "${results[0]}" != "FAIL" ]]; then
+            if [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                is_available=1
+            elif [[ "${results[2]}" =~ ^TLS1\.2:[23] ]] || [[ "${results[3]}" =~ ^TLS1\.3:[23] ]]; then
+                is_available=1
+            fi
+        fi
+        if [[ $is_available -eq 1 ]]; then
             available=$((available + 1))
-            is_available=1
         fi
         results_lines+=("$line|${results[0]}|${results[1]}|${results[2]}|${results[3]}|$is_available")
     done < "$list_path"
@@ -460,7 +472,6 @@ apply_config() {
 check_conf() {
     echo -e "\e[36mВыберите хостлист для тестирования (можно поменять в любой момент, запустив Меню управления запретом еще раз):\e[0m"
     PS3="Введите номер листа (по умолчанию для тестирования 'list-simple.txt'): "
-
     select LIST in $(for f in /opt/zapret/zapret.cfgs/lists/list*; do echo "$(basename "$f")"; done) "Отмена"; do
         if [[ "$LIST" == "Отмена" ]]; then
             main_menu
@@ -469,7 +480,6 @@ check_conf() {
             rm -f /opt/zapret/ipset/zapret-hosts-user.txt
             cp "$LIST_PATH" /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось скопировать хостлист"
             echo -e "\e[32mХостлист '$LIST' установлен.\e[0m"
-
             sleep 2
             break
         else
@@ -483,6 +493,8 @@ check_conf() {
         error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
     fi
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
+    echo -e "\e[36mЭто может занять много времени. Чтобы выйти, вы можете воспользоваться комбинацией клавиш CTRL+C. Продолжаю через 5 секунд...\e[0m"
+    sleep 5
     echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
     echo ""
     stats_file="/tmp/zapret_final_stats_$$.txt"
@@ -526,6 +538,7 @@ check_conf() {
     echo ""
     echo -e "\e[33mПрименяем лучшую стратегию: $best_config\e[0m"
     apply_config "$best_config"
+    sleep 3
     if [[ -f "$stats_file" ]] && [[ $(wc -l < "$stats_file") -gt 0 ]]; then
         echo ""
         echo -e "\e[36mСтатистика по всем стратегиям:\e[0m"
@@ -542,96 +555,22 @@ check_conf() {
         echo "└──────────────────────────────────────────────────────┘"
     fi
     rm -f "$stats_file"
-    return 0
+    sleep 5
 }
-check_list() {
 
+check_list() {
     LINE_COUNT=$(wc -l < "/opt/zapret/ipset/zapret-hosts-user.txt" 2>/dev/null || echo "0")
     if [ "$LINE_COUNT" = "0" ] && [ -s "/opt/zapret/ipset/zapret-hosts-user.txt" ]; then
         LINE_COUNT=$(awk 'END{print NR}' "/opt/zapret/ipset/zapret-hosts-user.txt" 2>/dev/null || echo "0")
     fi
-
     if ! [[ "$LINE_COUNT" =~ ^[0-9]+$ ]]; then
         echo "Ошибка: Не удалось подсчитать строки в файле"
         exit 1
     fi
-
     echo "В выбраном листе $LINE_COUNT доменов/айпи."
-
     if [ "$LINE_COUNT" -gt 100 ]; then
         echo "Проверка может занять *ОЧЕНЬ* много времени!"
-        
         echo ""
         read -p "Нажмите Enter для продолжения или Ctrl+C для отмены... "
     fi
-}
-check_conf_simple() {
-    rm -f /opt/zapret/ipset/zapret-hosts-user.txt
-    cp -r /opt/zapret/zapret.cfgs/lists/list-simple.txt /opt/zapret/ipset/zapret-hosts-user.txt
-    check_list
-    configs=($(ls /opt/zapret/zapret.cfgs/configurations/ | sort))
-    if [[ ${#configs[@]} -eq 0 ]]; then
-        error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
-    fi
-    echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
-    echo -e "\e[33mВсего стратегий: ${#configs[@]}\e[0m"
-    echo ""
-    stats_file="/tmp/zapret_final_stats_$$.txt"
-    > "$stats_file"
-    local best_config=""
-    local best_available=0
-    local total_domains=0
-    total_domains=0
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line=$(echo "$line" | sed 's/#.*//' | xargs)
-        [[ -n "$line" ]] && total_domains=$((total_domains + 1))
-    done < "$LIST_PATH"
-    for config in "${configs[@]}"; do
-        echo "──────────────────────────────────────────────────────────────────────────────"
-        echo ""
-        if ! apply_config "$config"; then
-            echo -e "\e[31mНе удалось применить стратегию: $config\e[0m"
-            echo ""
-            continue
-        fi
-        available=$(test_all_domains "$config" "$LIST_PATH" | tee /dev/tty | tail -1)
-        if [[ "$available" =~ ^[0-9]+$ ]]; then
-            echo "$config $available" >> "$stats_file"
-            if [[ $available -gt $best_available ]]; then
-                best_available=$available
-                best_config="$config"
-            fi
-        else
-            echo -e "\e[31mОшибка при тестировании стратегии: $config\e[0m"
-        fi
-    done
-    echo ""
-    echo -e "\e[42m\e[30m╔══════════════════════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "\e[42m\e[30m║                           ИТОГОВЫЙ РЕЗУЛЬТАТ                             ║\e[0m"
-    echo -e "\e[42m\e[30m╠══════════════════════════════════════════════════════════════════════════╣\e[0m"
-    echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
-    printf "\e[42m\e[30m║  Лучшая стратегия: %-52s ║\n\e[0m" "$best_config"
-    printf "\e[42m\e[30m║  Доступно доменов/IP: %-3d из %-3d (%.1f%%)                  ║\n\e[0m" "$best_available" "$total_domains" $(echo "scale=1; $best_available * 100 / $total_domains" | bc)
-    echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
-    echo -e "\e[42m\e[30m╚══════════════════════════════════════════════════════════════════════════╝\e[0m"
-    echo ""
-    echo -e "\e[33mПрименяем лучшую стратегию: $best_config\e[0m"
-    apply_config "$best_config"
-    if [[ -f "$stats_file" ]] && [[ $(wc -l < "$stats_file") -gt 0 ]]; then
-        echo ""
-        echo -e "\e[36mСтатистика по всем стратегиям:\e[0m"
-        echo "┌──────────────────────────────────────────────────────┐"
-        printf "│ %-30s │ %-10s │ %-6s │\n" "Стратегия" "Доступно" "%"
-        echo "├──────────────────────────────────────────────────────┤"
-        while read -r line; do
-            read -r config count <<< "$line"
-            if [[ "$count" =~ ^[0-9]+$ ]] && [[ $total_domains -gt 0 ]]; then
-                percentage=$(echo "scale=1; $count * 100 / $total_domains" | bc)
-                printf "│ %-30s │ %-10s │ %-5s%% │\n" "$config" "$count/$total_domains" "$percentage"
-            fi
-        done < "$stats_file"
-        echo "└──────────────────────────────────────────────────────┘"
-    fi
-    rm -f "$stats_file"
-    return 0
 }
