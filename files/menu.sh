@@ -26,10 +26,11 @@ main_menu() {
 
         if [[ $ZAPRET_EXIST == true ]]; then
             echo -e "  \e[1;34m0)\e[0m Выйти"
-            echo -e "  \e[1;33m1)\e[0m Проверить на обновления и обновить"
-            echo -e "  \e[1;36m2)\e[0m Сменить конфигурацию запрета"
-            echo -e "  \e[1;35m3)\e[0m Управление сервисом запрета"
-            echo -e "  \e[1;31m4)\e[0m Удалить Запрет"
+            echo -e "  \e[1;32m1)\e[0m Автоподбор лучшей стратегии"
+            echo -e "  \e[1;33m2)\e[0m Проверить на обновления и обновить"
+            echo -e "  \e[1;36m3)\e[0m Сменить конфигурацию запрета"
+            echo -e "  \e[1;35m4)\e[0m Управление сервисом запрета"
+            echo -e "  \e[1;31m5)\e[0m Удалить Запрет"
         else
             echo -e "  \e[1;34m0)\e[0m Выйти"
             echo -e "  \e[1;32m1)\e[0m Установить Запрет"
@@ -43,10 +44,11 @@ main_menu() {
         if [[ $ZAPRET_EXIST == true ]]; then
             read -p $'\e[1;36mВыберите действие: \e[0m' CHOICE
             case "$CHOICE" in
-                1) update_zapret_menu;;
-                2) change_configuration;;
-                3) toggle_service;;
-                4) uninstall_zapret;;
+                1) auto_select_strategy;;
+                2) update_zapret_menu;;
+                3) change_configuration;;
+                4) toggle_service;;
+                5) uninstall_zapret;;
                 0) $TPUT_E; exit 0;;
                 *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
             esac
@@ -136,27 +138,31 @@ change_configuration() {
     done
 }
 configure_zapret_menu(){
-    while true; do
-        clear
-        cur_conf
-        echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
-        echo -e "║         Управление стратегиями Запрета       ║"
-        echo -e "╚══════════════════════════════════════════════╝\e[0m"
-        echo -e "  \e[1;33m Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
-        echo -e "  \e[1;31m0)\e[0m Выйти в меню"
-        echo -e "  \e[1;34m1)\e[0m Выбрать стратегию вручную"
-        echo -e "  \e[1;34m2)\e[0m Подобрать стратегию автоматически"
-        echo ""
-        echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
-        echo ""
-        read -p $'\e[1;36m Выберите действие: \e[0m' CHOICE
-        case "$CHOICE" in
-            1) configure_zapret_conf;;
-            2) check_conf;;
-            0) main_menu;;
-            *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
-        esac
-    done
+    if existf strategy_menu; then
+        strategy_menu
+    else
+        while true; do
+            clear
+            cur_conf
+            echo -e "\e[1;36m╔══════════════════════════════════════════════╗"
+            echo -e "║         Управление стратегиями Запрета       ║"
+            echo -e "╚══════════════════════════════════════════════╝\e[0m"
+            echo -e "  \e[1;33m Используемая стратегия:\e[0m \e[1;32m$cr_cnf\e[0m"
+            echo -e "  \e[1;31m0)\e[0m Выйти в меню"
+            echo -e "  \e[1;34m1)\e[0m Выбрать стратегию вручную"
+            echo -e "  \e[1;34m2)\e[0m Подобрать стратегию автоматически"
+            echo ""
+            echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
+            echo ""
+            read -p $'\e[1;36m Выберите действие: \e[0m' CHOICE
+            case "$CHOICE" in
+                1) configure_zapret_conf;;
+                2) check_conf;;
+                0) main_menu;;
+                *) echo -e "\e[1;31m Неверный ввод! Попробуйте снова.\e[0m"; sleep 2;;
+            esac
+        done
+    fi
 }
 
 
