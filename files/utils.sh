@@ -2,8 +2,8 @@
 
 
 error_exit() {
-    $TPUT_E 
-    echo -e "\e[31mОшибка:\e[0m $1" >&2 
+    $TPUT_E
+    echo -e "\e[31mОшибка:\e[0m $1" >&2
     exit 1
 }
 
@@ -50,7 +50,7 @@ try_again() {
     local error_message="$1"
     shift
 
-    local -a command=("$@") 
+    local -a command=("$@")
     local attempt=0
     local max_attempts=3
     local success=0
@@ -70,34 +70,30 @@ try_again() {
     done
 
     (( success == 0 )) && error_exit "$error_message"
-} 
+}
+
 open_editor() {
     local file_path="$1"
-    
     if [ ! -f "$file_path" ]; then
-        error_exit "Заданного файла не существует"
+        error_exit "Не найден файл '$file_path'"
     fi
-    local editor="nano"
-    if ! command -v "$editor" >/dev/null 2>&1; then
-        echo "Редактор '$editor' не найден в системе"
-        
-        if command -v "vim" >/dev/null 2>&1; then
-            editor="vim"
-        elif command -v "vi" >/dev/null 2>&1; then
-            editor="vi"
-        else
-            echo "Не найдено ни одного текстового редактора"
-            echo "Установите nano, vim или другой редактор"
-            echo ""
-            echo "Возврат в главное меню через 5 секунд..."
-            sleep 5
-            main_menu
+
+    local editors_list=("$EDITOR" "$VISUAL" "nano" "vim" "neovim" "helix")
+    for editor in ${editors_list[@]}; do
+        if command -v "$editor"; then
+            "$editor" "$file_path"
             return
         fi
-    fi
-    "$editor" "$file_path"
-    main_menu
+    done
+
+    echo "Не найдено ни одного текстового редактора из списка:"
+    echo "${editors_list[@]}"
+    echo "Установите один из вышеперечисленных редакторов"
+    echo ""
+    echo "Возврат в главное меню через 5 секунд..."
+    sleep 5
 }
+
 fast_exit(){
     $TPUT_E
     echo "Выход по запросу пользователя"
