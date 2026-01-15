@@ -78,7 +78,7 @@ open_editor() {
         error_exit "Не найден файл '$file_path'"
     fi
 
-    local editors_list=("$EDITOR" "$VISUAL" "nano" "vim" "neovim" "helix")
+    local editors_list=("$EDITOR" "$VISUAL" "nano" "vim" "nvim" "helix")
     for editor in ${editors_list[@]}; do
         if command -v "$editor"; then
             "$editor" "$file_path"
