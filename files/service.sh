@@ -183,8 +183,8 @@ toggle_service() {
         echo ""
 
         echo -e "  \e[1;31m0)\e[0m Выйти в меню"
-        echo -e "  \e[1;33m1)\e[0m $( [[ $ZAPRET_ENABLED == true ]] && echo " Убрать из автозагрузки" || echo " Добавить в автозагрузку" )"
-        echo -e "  \e[1;32m2)\e[0m $( [[ $ZAPRET_ACTIVE == true ]] && echo " Выключить Запрет" || echo " Включить Запрет" )"
+        echo -e "  \e[1;33m1)\e[0m $( [[ $ZAPRET_ENABLED == true ]] && echo "Убрать из автозагрузки" || echo "Добавить в автозагрузку" )"
+        echo -e "  \e[1;32m2)\e[0m $( [[ $ZAPRET_ACTIVE == true ]] && echo "Выключить Запрет" || echo "Включить Запрет" )"
         echo -e "  \e[1;36m3)\e[0m Посмотреть статус Запрета"
         echo -e "  \e[1;35m4)\e[0m Перезапустить Запрет"
 
