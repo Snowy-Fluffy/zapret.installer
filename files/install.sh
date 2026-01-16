@@ -91,7 +91,7 @@ install_dependencies() {
             ["mint"]="apt-get install -y iptables ipset"
             ["centos"]="yum install -y ipset iptables"
             ["void"]="xbps-install -y iptables ipset"
-            ["gentoo"]="emerge net-firewall/iptables net-firewall/ipset"
+            ["gentoo"]="emerge --noreplace net-firewall/iptables net-firewall/ipset"
             ["opensuse"]="zypper install -y iptables ipset"
             ["openwrt"]="opkg install iptables ipset"
             ["altlinux"]="apt-get install -y iptables ipset"
