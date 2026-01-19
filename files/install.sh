@@ -253,7 +253,7 @@ update_zapret() {
     if [ -f /opt/zapret-ver ]; then
         #cat /opt/zapret-ver | tr -d '[:space:]' - useful
         if [ -z $(cat /opt/zapret-ver) ] || [ $(cat /opt/zapret-ver) != "git" ]; then
-            download_zapret || error_exit "не удалось обновить запрет"
+            download_zapret_release || download_zapret_git || error_exit "не удалось обновить запрет"
             echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
             cd /opt/zapret
             sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh
@@ -264,7 +264,7 @@ update_zapret() {
             echo -e "Репозиторий запрета был обновлен."
         fi
     else
-        download_zapret || error_exit "не удалось обновить zapret"
+        download_zapret_release || download_zapret_git || error_exit "не удалось обновить zapret"
         echo -e "Запрет обновлен до версии $(cat /opt/zapret-ver)"
         cd /opt/zapret
         sed -i '238s/ask_yes_no N/ask_yes_no Y/' /opt/zapret/common/installer.sh

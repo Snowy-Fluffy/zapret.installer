@@ -164,7 +164,7 @@ update_zapret_menu(){
     while true; do
         clear
         echo -e "\e[1;36m╔════════════════════════════════════╗"
-        echo -e "║            Обновление Запрета       ║"
+        echo -e "║           Обновление Запрета       ║"
         echo -e "║         Текущая версия: $(if [ -f /opt/zapret-ver ]; then cat /opt/zapret-ver; else echo "Неизвестно";fi)       ║"
 
         echo -e "║       Последняя версия: $(get_latest_version)       ║"
