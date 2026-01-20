@@ -105,12 +105,16 @@ change_configuration() {
         echo -e "  \e[1;34m4)\e[0m Добавить IP или домены в лист"
         echo -e "  \e[1;34m5)\e[0m Удалить IP или домены из листа"
         echo -e "  \e[1;34m6)\e[0m Найти IP или домены в листе"
-        echo -e "  \e[1;34m7)\e[0m Установить стратегию из файла (путь)"
-        echo -e "  \e[1;34m8)\e[0m Установить хостлист из файла (путь)"
-        echo -e "  \e[1;34m9)\e[0m Редактировать стратегию напрямую"
-        echo -e "  \e[1;34m10)\e[0m Редактировать хостлист напрямую"
-        echo -e "  \e[1;34m11)\e[0m Создать/Редактировать кастомный хостлист"
-        echo -e "  \e[1;34m12)\e[0m Создать/Редактировать кастомную стратегию"
+        echo -e "  \e[1;34m7)\e[0m Добавить IP или домены в лист исключений (exclude)"
+        echo -e "  \e[1;34m8)\e[0m Удалить IP или домены из листа исключений (exclude)"
+        echo -e "  \e[1;34m9)\e[0m Найти IP или домены в листе исключений (exclude)"
+        echo -e "  \e[1;34m10)\e[0m Установить стратегию из файла (путь)"
+        echo -e "  \e[1;34m11)\e[0m Установить хостлист из файла (путь)"
+        echo -e "  \e[1;34m12)\e[0m Редактировать стратегию напрямую"
+        echo -e "  \e[1;34m13)\e[0m Редактировать хостлист напрямую"
+        echo -e "  \e[1;34m14)\e[0m Редактировать хостлист исключений (exclude) напрямую"
+        echo -e "  \e[1;34m15)\e[0m Создать/Редактировать кастомный хостлист"
+        echo -e "  \e[1;34m16)\e[0m Создать/Редактировать кастомную стратегию"
 
         echo ""
         echo -e "\e[1;96mСделано\e[0m by: \e[4;94mhttps://t.me/linux_hi\e[0m"
@@ -124,12 +128,16 @@ change_configuration() {
             4) add_to_zapret ;;
             5) delete_from_zapret ;;
             6) search_in_zapret ;;
-            7) configure_custom_conf_path ;;
-            8) configure_custom_list_path ;;
-            9) open_editor /opt/zapret/config ;;
-            10) open_editor /opt/zapret/ipset/zapret-hosts-user.txt ;;
-            11) edit_cust_list;;
-            12) edit_cust_conf;;
+            7) add_to_zapret_exc ;;
+            8) delete_from_zapret_exc ;;
+            9) search_in_zapret_exc ;;
+            10) configure_custom_conf_path ;;
+            11) configure_custom_list_path ;;
+            12) open_editor /opt/zapret/config ;;
+            13) open_editor /opt/zapret/ipset/zapret-hosts-user.txt ;;
+            14) open_editor /opt/zapret/ipset/zapret-hosts-user-exclude.txt ;;
+            15) edit_cust_list;;
+            16) edit_cust_conf;;
             0) main_menu ;;
             *) echo -e "\e[1;31mНеверный ввод! Попробуйте снова.\e[0m"; sleep 2 ;;
         esac

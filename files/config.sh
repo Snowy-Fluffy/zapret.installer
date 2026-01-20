@@ -296,6 +296,30 @@ add_to_zapret() {
     sleep 2
     main_menu
 }
+add_to_zapret_exc() {
+    read -p "Введите IP-адреса или домены для добавления в лист исключений (разделяйте пробелами, запятыми или |)(Enter и пустой ввод для отмены): " input
+    
+    if [[ -z "$input" ]]; then
+        main_menu
+    fi
+
+    IFS=',| ' read -ra ADDRESSES <<< "$input"
+
+    for address in "${ADDRESSES[@]}"; do
+        address=$(echo "$address" | xargs)
+        if [[ -n "$address" && ! $(grep -Fxq "$address" "/opt/zapret/ipset/zapret-hosts-user-exclude.txt") ]]; then
+            echo "$address" >> "/opt/zapret/ipset/zapret-hosts-user-exclude.txt"
+            echo "Добавлено: $address"
+        else
+            echo "Уже существует: $address"
+        fi
+    done
+    
+    manage_service restart
+    echo "Готово"
+    sleep 2
+    main_menu
+}
 edit_cust_list() {
     if [ -e "/opt/zapret/zapret.cfgs/lists/list-custom.txt" ]; then
         open_editor /opt/zapret/zapret.cfgs/lists/list-custom.txt
@@ -368,6 +392,57 @@ search_in_zapret() {
     echo "----------------------------------------"
 
     if grep -i --color=never -F "$keyword" "/opt/zapret/ipset/zapret-hosts-user.txt"; then
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для продолжения..."
+    else
+        echo "❌ Совпадений не найдено."
+        echo "----------------------------------------"
+        read -rp "Нажмите Enter для возврата в меню..."
+    fi
+
+    main_menu
+}
+delete_from_zapret_exc() {
+    read -p "Введите IP-адреса или домены для удаления из листа исключений (разделяйте пробелами, запятыми или |)(Enter и пустой ввод для отмены): " input
+
+    if [[ -z "$input" ]]; then
+        main_menu
+    fi
+
+    IFS=',| ' read -ra ADDRESSES <<< "$input"
+
+    for address in "${ADDRESSES[@]}"; do
+        address=$(echo "$address" | xargs)
+        if [[ -n "$address" ]]; then
+            if grep -Fxq "$address" "/opt/zapret/ipset/zapret-hosts-user-exclude.txt"; then
+                sed -i "\|^$address\$|d" "/opt/zapret/ipset/zapret-hosts-user-exclude.txt"
+                echo "Удалено: $address"
+            else
+                echo "Не найдено: $address"
+            fi
+        fi
+    done
+
+    manage_service restart
+    echo "Готово"
+    sleep 2
+    main_menu
+}
+
+
+search_in_zapret_exc() {
+    read -p "Введите домен или IP-адрес для поиска в листе исключений (Enter и пустой ввод для отмены): " keyword
+
+    if [[ -z "$keyword" ]]; then
+        main_menu
+        return
+    fi
+
+    echo
+    echo "🔍 Результаты поиска по запросу: $keyword"
+    echo "----------------------------------------"
+
+    if grep -i --color=never -F "$keyword" "/opt/zapret/ipset/zapret-hosts-user-exclude.txt"; then
         echo "----------------------------------------"
         read -rp "Нажмите Enter для продолжения..."
     else
