@@ -260,7 +260,7 @@ update_zapret() {
             yes "" | ./install_easy.sh
             sed -i '238s/ask_yes_no Y/ask_yes_no N/' /opt/zapret/common/installer.sh
         else
-            cd /opt/zapret/ && git fetch origin master; git reset --hard origin/master || error_exit "не удалось обновить zapret с помощью git. Попробуйте снова, вероятно это сетевая ошибка. Если не помогло - переустановите zapret."
+            cd /opt/zapret/ && git checkout master && git fetch origin master && git restore . || error_exit "не удалось обновить zapret с помощью git. Попробуйте снова, вероятно это сетевая ошибка. Если не помогло - переустановите zapret."
             echo -e "Репозиторий запрета был обновлен."
         fi
     else
@@ -273,10 +273,10 @@ update_zapret() {
     fi
 
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret.installer/ && git checkout main && git fetch origin main && git restore .
         rm -f /bin/zapret
         ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
     fi
@@ -305,10 +305,10 @@ update_zapret() {
 
 update_script() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret.installer/ && git checkout main && git fetch origin main && git restore .
     fi
     rm -f /bin/zapret
     ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
@@ -318,10 +318,10 @@ update_script() {
 
 update_installed_script() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
-        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
     fi
     if [[ -d /opt/zapret.installer/ ]]; then
-        cd /opt/zapret.installer/ && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret.installer/ && git checkout main && git fetch origin main && git restore .
         rm -f /bin/zapret
         ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
         manage_service restart

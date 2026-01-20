@@ -151,7 +151,7 @@ configure_zapret_conf() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
         manage_service stop 
-        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
         manage_service start
         sleep 2
     fi
@@ -195,7 +195,7 @@ configure_zapret_list() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
         manage_service stop
-        cd /opt/zapret/zapret.cfgs && git fetch origin main; git reset --hard origin/main
+        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
         manage_service start
         sleep 2
     fi
@@ -593,48 +593,101 @@ check_conf() {
     done
     manage_service restart
     check_list
-    configs=($(ls /opt/zapret/zapret.cfgs/configurations/ | sort))
-    if [[ ${#configs[@]} -eq 0 ]]; then
-        error_exit "\e[31mне найдено ни одной стратегии в /opt/zapret/zapret.cfgs/configurations/\e[0m"
+    echo ""
+    
+    echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
+    echo -e "\e[33mМожно выбрать несколько стратегий через пробел или тире (например: '1 3 5' или '1-5' или '1-3 5 7-9')\e[0m"
+    echo ""
+    
+    all_configs=($(for f in /opt/zapret/zapret.cfgs/configurations/*; do basename "$f" | tr ' ' '.'; done))
+    
+    if [[ ${#all_configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mНет доступных стратегий для проверки\e[0m"
     fi
-    echo ""
-    echo -e "\e[36mСписок всех стратегий:\e[0m"
-    for i in "${!configs[@]}"; do
-        printf "  %2d. %s\n" $((i+1)) "${configs[$i]}"
-    done
-    echo ""
-    echo -e "\e[33mВведите номера стратегий, которые нужно исключить из проверки (через пробел).\nНапример: 2 5 8\e[0m"
-    echo -e "\e[33mОставьте пустым, чтобы проверить все стратегии.\e[0m"
-    read -p "Номера для исключения: " exclude_nums
-    excluded_configs=()
-    if [[ -n "$exclude_nums" ]]; then
-        for num in $exclude_nums; do
-            index=$((num-1))
-            if [[ $index -ge 0 ]] && [[ $index -lt ${#configs[@]} ]]; then
-                excluded_configs+=("${configs[$index]}")
-                echo -e "\e[31mИсключаем стратегию: ${configs[$index]}\e[0m"
-            else
-                echo -e "\e[31mНеверный номер: $num\e[0m"
-            fi
-        done
-        filtered_configs=()
-        for config in "${configs[@]}"; do
-            exclude=0
-            for excl in "${excluded_configs[@]}"; do
-                if [[ "$config" == "$excl" ]]; then
-                    exclude=1
-                    break
+    
+    PS3="Введите номера стратегий (через пробел или диапазоны): "
+    select _ in "${all_configs[@]}" "Выбрать все стратегии"; do
+        user_input="$REPLY"
+        if [[ -z "$user_input" ]] || [[ "$user_input" == $((${#all_configs[@]} + 1)) ]]; then
+            configs=("${all_configs[@]}")
+            echo -e "\e[33mБудут проверены ВСЕ стратегии.\e[0m"
+            break
+        fi
+        
+        selected_indices=()
+        valid_input=true
+        configs=()
+        read -ra parts <<< "$user_input"
+        
+        for part in "${parts[@]}"; do
+            if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                start="${BASH_REMATCH[1]}"
+                end="${BASH_REMATCH[2]}"
+                
+                if [[ $start -le 0 ]] || [[ $end -le 0 ]]; then
+                    echo -e "\e[31mОшибка: номера должны быть положительными числами (неверный диапазон: $part)\e[0m"
+                    valid_input=false
+                    continue
                 fi
-            done
-            if [[ $exclude -eq 0 ]]; then
-                filtered_configs+=("$config")
+                
+                if [[ $start -gt $end ]]; then
+                    temp=$start
+                    start=$end
+                    end=$temp
+                fi
+                for ((i=start; i<=end; i++)); do
+                    if [[ $i -le ${#all_configs[@]} ]] && [[ $i -ge 1 ]]; then
+                        selected_indices+=("$i")
+                    fi
+                done
+            elif [[ "$part" =~ ^[0-9]+$ ]]; then
+                if [[ $part -le 0 ]]; then
+                    echo -e "\e[31mОшибка: номер должен быть положительным числом (неверный номер: $part)\e[0m"
+                    valid_input=false
+                    continue
+                fi
+                
+                if [[ $part -le ${#all_configs[@]} ]]; then
+                    selected_indices+=("$part")
+                else
+                    echo -e "\e[31mОшибка: номер $part превышает количество доступных стратегий (${#all_configs[@]})\e[0m"
+                    valid_input=false
+                fi
+            else
+                echo -e "\e[31mОшибка: неверный формат '$part'. Используйте числа или диапазоны (например: '1-5')\e[0m"
+                valid_input=false
             fi
         done
-        configs=("${filtered_configs[@]}")
-    fi
+        
+        if [[ $valid_input == true ]] && [[ ${#selected_indices[@]} -gt 0 ]]; then
+            unique_indices=($(printf "%s\n" "${selected_indices[@]}" | sort -n | uniq))
+            
+            configs=()
+            for index in "${unique_indices[@]}"; do
+                array_index=$((index-1))
+                configs+=("${all_configs[$array_index]}")
+            done
+            
+            echo ""
+            echo -e "\e[32mВыбрано стратегий: ${#configs[@]}\e[0m"
+            echo -e "\e[33mБудут проверены:\e[0m"
+            for i in "${!configs[@]}"; do
+                echo "$((i+1)). ${configs[$i]}"
+            done
+            break
+        elif [[ ${#selected_indices[@]} -eq 0 ]] && [[ $valid_input == true ]]; then
+            echo -e "\e[31mНе выбрано ни одной стратегии. Попробуйте снова.\e[0m"
+            echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
+            echo -e "\e[33mМожно выбрать несколько стратегий через пробел или диапазоны (например: '1 3 5' или '1-5' или '1-3 5 7-9')\e[0m"
+            echo -e "\e[33mОставьте пустым для проверки всех стратегий\e[0m"
+            PS3="Введите номера стратегий (через пробел или диапазоны): "
+        fi
+    done
+    
     if [[ ${#configs[@]} -eq 0 ]]; then
-        error_exit "\e[31mВсе стратегии исключены, нечего проверять\e[0m"
+        error_exit "\e[31mНе выбрано ни одной стратегии для проверки\e[0m"
     fi
+    
     echo -e "\e[33mБудет проверено стратегий: ${#configs[@]}\e[0m"
     echo ""
     echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
@@ -653,7 +706,8 @@ check_conf() {
     for config in "${configs[@]}"; do
         echo "──────────────────────────────────────────────────────────────────────────────"
         echo ""
-        if ! apply_config "$config"; then
+        config_original="${config//./ }"
+        if ! apply_config "$config_original"; then
             echo -e "\e[31mНе удалось применить стратегию: $config\e[0m"
             echo ""
             continue
@@ -680,7 +734,8 @@ check_conf() {
     echo -e "\e[42m\e[30m╚══════════════════════════════════════════════════════════════════════════╝\e[0m"
     echo ""
     echo -e "\e[33mПрименяем лучшую стратегию: $best_config\e[0m"
-    apply_config "$best_config"
+    best_config_original="${best_config//./ }"
+    apply_config "$best_config_original"
     sleep 3
     if [[ -f "$stats_file" ]] && [[ $(wc -l < "$stats_file") -gt 0 ]]; then
         echo ""
@@ -698,9 +753,9 @@ check_conf() {
         echo "└──────────────────────────────────────────────────────┘"
     fi
     rm -f "$stats_file"
-    sleep 5
+    read -p "Нажмите Enter для продолжения..."
+    sleep 1
 }
-
 check_list() {
     LINE_COUNT=$(wc -l < "/opt/zapret/ipset/zapret-hosts-user.txt" 2>/dev/null || echo "0")
     if [ "$LINE_COUNT" = "0" ] && [ -s "/opt/zapret/ipset/zapret-hosts-user.txt" ]; then
