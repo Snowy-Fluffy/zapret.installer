@@ -47,7 +47,7 @@ download_zapret_release()
             error_exit "Не удалось разархивировать архив с релизом запрета."
         fi
     else
-        curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*tar.gz" | grep -v "openwrt" | head -n 1 | cut -d '"' -f 4 | xargs -I {} curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" "{}" || error_exit "не могу получить релиз запрета"
+        curl -s https://api.github.com/repos/bol-van/zapret/releases/latest | grep "browser_download_url.*tar.gz" | grep -v "openwrt" | head -n 1 | cut -d '"' -f 4 | while read zurl; do curl -L -o "$TEMP_DIR_BIN/latest.tar.gz" "$zurl" || error_exit "не могу получить релиз запрета"; done
         if ! tar -xzf $TEMP_DIR_BIN/latest.tar.gz -C /opt/; then
             rm -rf $TEMP_DIR_BIN /opt/zapret-v$(get_latest_version)
             error_exit "Не удалось разархивировать архив с релизом запрета."
