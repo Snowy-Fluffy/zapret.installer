@@ -151,7 +151,7 @@ configure_zapret_conf() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
         manage_service stop 
-        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
+        cd /opt/zapret.installer && git fetch origin && git checkout -B main origin/main && git reset --hard origin/main
         manage_service start
         sleep 2
     fi
@@ -195,7 +195,7 @@ configure_zapret_list() {
     if [[ -d /opt/zapret/zapret.cfgs ]]; then
         echo "Проверяю наличие на обновление конфигураций..."
         manage_service stop
-        cd /opt/zapret/zapret.cfgs && git checkout main && git fetch origin main && git restore .
+        cd /opt/zapret.installer && git fetch origin && git checkout -B main origin/main && git reset --hard origin/main
         manage_service start
         sleep 2
     fi
