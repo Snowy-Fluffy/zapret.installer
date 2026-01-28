@@ -456,38 +456,53 @@ search_in_zapret_exc() {
 
 test_domain() {
     local domain="$1"
-    local results=()
     domain=$(echo "$domain" | sed 's/#.*//' | xargs)
     [[ -z "$domain" ]] && return
+
+    # Временный файл для хранения результатов
+    local r_file="$(mktemp)"
+    # FAIL - результат по-умолчанию для ping http tls1.2 tls1.3 (построчно)
+    echo -en "FAIL\nFAIL\nFAIL\nFAIL" > "$r_file"
+
+    # Таймауты
+    local t_ping=2
+    local t_http=5
+
     if [[ "$domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         test_ip "$domain"
     else
-        ping_result=$(ping -c 2 -W 2 "$domain" 2>/dev/null | grep -E "rtt min/avg/max/mdev" | awk -F'/' '{print $5}')
-        if [[ -n "$ping_result" ]]; then
-            results+=("${ping_result}ms")
-        else
-            results+=("FAIL")
-        fi
-        http_result=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "http://$domain" 2>/dev/null || echo "FAIL")
-        if [[ "$http_result" =~ ^[0-9]+$ ]]; then
-            results+=("HTTP:$http_result")
-        else
-            results+=("FAIL")
-        fi
-        tls12_result=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --tlsv1.2 "https://$domain" 2>/dev/null || echo "FAIL")
-        if [[ "$tls12_result" =~ ^[0-9]+$ ]]; then
-            results+=("TLS1.2:$tls12_result")
-        else
-            results+=("FAIL")
-        fi
-        tls13_result=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" --tlsv1.3 "https://$domain" 2>/dev/null || echo "FAIL")
-        if [[ "$tls13_result" =~ ^[0-9]+$ ]]; then
-            results+=("TLS1.3:$tls13_result")
-        else
-            results+=("FAIL")
-        fi
+        # Асинхронно запустим ping, http и https.
+        # sed запишет результат строго в указанную строку
+        {
+            result=$(ping -c 2 -W $t_ping "$domain" 2>/dev/null | grep -E "rtt min/avg/max/mdev" | awk -F'/' '{print $5}')
+            if [[ -n "$result" ]]; then
+                sed -i "1c\\${result}ms" "$r_file"
+            fi
+        } &
+        {
+            result=$(curl -m $t_http -s -o /dev/null -w "%{http_code}" "http://$domain" 2>/dev/null || echo "FAIL")
+            if [[ "$result" =~ ^[0-9]+$ ]]; then
+                sed -i "2c\\HTTP:$result" "$r_file"
+            fi
+        } &
+        # https будет синхронным - в обоих случаях подключение идет по одному и тому же порту (443)
+        # и будет некорректно запускать оба подключения одновременно.
+        {
+            result=$(curl -m $t_http -s -o /dev/null -w "%{http_code}" --tlsv1.2 "https://$domain" 2>/dev/null || echo "FAIL")
+            if [[ "$result" =~ ^[0-9]+$ ]]; then
+                sed -i "3c\\TLS1.2:$result" "$r_file"
+            fi
+            result=$(curl -m $t_http -s -o /dev/null -w "%{http_code}" --tlsv1.3 "https://$domain" 2>/dev/null || echo "FAIL")
+            if [[ "$result" =~ ^[0-9]+$ ]]; then
+                sed -i "4c\\TLS1.3:$result" "$r_file"
+            fi
+        } &
     fi
-    echo "${results[@]}"
+
+    # Ждем окончания всех запросов, объединяем строки с результатами в одну, удаляем временный файл
+    wait
+    echo $(paste -sd ' ' "$r_file")
+    rm -f "$r_file"
 }
 
 test_ip() {
