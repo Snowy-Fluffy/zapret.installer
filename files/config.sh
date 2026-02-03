@@ -743,8 +743,8 @@ check_conf() {
     echo -e "\e[42m\e[30m║                           ИТОГОВЫЙ РЕЗУЛЬТАТ                             ║\e[0m"
     echo -e "\e[42m\e[30m╠══════════════════════════════════════════════════════════════════════════╣\e[0m"
     echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
-    printf "\e[42m\e[30m║  Лучшая стратегия: %-52s ║\n\e[0m" "$best_config"
-    printf "\e[42m\e[30m║  Доступно доменов/IP: %-3d из %-3d (%.1f%%)                  ║\n\e[0m" "$best_available" "$total_domains" $(echo "scale=1; $best_available * 100 / $total_domains" | bc)
+    printf "\e[42m\e[30m║  Лучшая стратегия:    %-50s ║\n\e[0m" "$best_config"
+    printf "\e[42m\e[30m║  Доступно доменов/IP: %-52s ║\n\e[0m" "$best_available из $total_domains ($(echo "scale=1; $best_available * 100 / $total_domains" | bc)%)"
     echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
     echo -e "\e[42m\e[30m╚══════════════════════════════════════════════════════════════════════════╝\e[0m"
     echo ""
