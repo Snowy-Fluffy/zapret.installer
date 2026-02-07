@@ -787,3 +787,195 @@ check_list() {
         read -p "Нажмите Enter для продолжения или Ctrl+C для отмены... "
     fi
 }
+
+
+# Добавляем новую функцию с поддержкой потоков
+# Добавляем новую функцию с поддержкой потоков
+fast_check_conf() {
+    echo -e "\e[36mВыберите хостлист для тестирования:\e[0m"
+    echo -e "\e[33mЦвета указывают на размер листа: \e[32m<500\e[0m | \e[33m<1000\e[0m | \e[31m>1000\e[0m\e[0m"
+    echo ""
+    
+    # Создаем массивы для выбора
+    list_options=()
+    list_counts=()
+    list_paths=()
+    
+    i=1
+    for f in /opt/zapret/zapret.cfgs/lists/list*; do
+        if [[ -f "$f" ]]; then
+            list_name=$(basename "$f")
+            # Подсчитываем строки (исключая комментарии и пустые строки)
+            count=$(grep -v '^#' "$f" | grep -v '^$' | wc -l)
+            list_counts[$i]=$count
+            list_paths[$i]="$f"
+            
+            # Выбираем цвет в зависимости от количества
+            if [[ $count -lt 500 ]]; then
+                color="\e[32m"  # зеленый
+            elif [[ $count -lt 1000 ]]; then
+                color="\e[33m"  # оранжевый/желтый
+            else
+                color="\e[31m"  # красный
+            fi
+            
+            list_options[$i]="${color}${list_name} ($count записей)\e[0m"
+            i=$((i+1))
+        fi
+    done
+    
+    if [[ ${#list_options[@]} -eq 0 ]]; then
+        echo -e "\e[31mНет доступных хостлистов!\e[0m"
+        sleep 2
+        main_menu
+    fi
+    
+    # Добавляем опцию отмены
+    list_options[$i]="Отмена"
+    
+    PS3="Введите номер листа: "
+    select LIST_DISPLAY in "${list_options[@]}"; do
+        if [[ "$LIST_DISPLAY" == "Отмена" ]]; then
+            main_menu
+        elif [[ -n "$LIST_DISPLAY" ]]; then
+            # Извлекаем имя файла из отформатированной строки
+            list_index=$REPLY
+            LIST_PATH="${list_paths[$list_index]}"
+            LIST=$(basename "$LIST_PATH")
+            count=${list_counts[$list_index]}
+            
+            # Определяем цвет для сообщения подтверждения
+            if [[ $count -lt 500 ]]; then
+                confirm_color="\e[32m"
+            elif [[ $count -lt 1000 ]]; then
+                confirm_color="\e[33m"
+            else
+                confirm_color="\e[31m"
+            fi
+            
+            echo -e "${confirm_color}Выбран хостлист: $LIST ($count записей)\e[0m"
+            sleep 1
+            break
+        else
+            echo -e "\e[31mНеверный выбор.\e[0m"
+        fi
+    done
+    
+    # Запрашиваем количество потоков
+    echo ""
+    read -p "Введите количество потоков для тестирования (рекомендуется 10-50): " threads
+    threads=${threads:-10}
+    
+    if ! [[ "$threads" =~ ^[0-9]+$ ]] || [ "$threads" -lt 1 ] || [ "$threads" -gt 100 ]; then
+        echo -e "\e[31mНекорректное количество потоков. Используется 10.\e[0m"
+        threads=10
+    fi
+    
+    echo ""
+    echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
+    echo -e "\e[33mМожно выбрать несколько через пробел или диапазоны (например: '1 3 5' или '1-5')\e[0m"
+    
+    all_configs=()
+    for f in /opt/zapret/zapret.cfgs/configurations/*; do
+        all_configs+=("$(basename "$f" | tr ' ' '.')")
+    done
+    
+    # Показываем список стратегий
+    echo -e "\n\e[34mДоступные стратегии:\e[0m"
+    for i in "${!all_configs[@]}"; do
+        echo -e "\e[37m$((i+1)). ${all_configs[i]}\e[0m"
+    done
+    
+    echo -e "\n\e[33mОставьте пустым для тестирования ВСЕХ стратегий\e[0m"
+    read -p "Введите номера стратегий: " user_input
+    
+    # Подготавливаем JSON с выбранными стратегиями
+    CONFIG_JSON="/tmp/zapret_test_configs_$$.json"
+    declare -A selected_configs
+    
+    if [[ -z "$user_input" ]]; then
+        # Все стратегии
+        for config in "${all_configs[@]}"; do
+            config_original="${config//./ }"
+            selected_configs["$config"]="/opt/zapret/zapret.cfgs/configurations/$config_original"
+        done
+    else
+        # Парсим ввод пользователя
+        selected_indices=()
+        read -ra parts <<< "$user_input"
+        
+        for part in "${parts[@]}"; do
+            if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                start="${BASH_REMATCH[1]}"
+                end="${BASH_REMATCH[2]}"
+                for ((i=start; i<=end; i++)); do
+                    if [[ $i -le ${#all_configs[@]} ]] && [[ $i -ge 1 ]]; then
+                        selected_indices+=("$i")
+                    fi
+                done
+            elif [[ "$part" =~ ^[0-9]+$ ]] && [[ $part -le ${#all_configs[@]} ]] && [[ $part -ge 1 ]]; then
+                selected_indices+=("$part")
+            fi
+        done
+        
+        # Убираем дубликаты
+        unique_indices=($(printf "%s\n" "${selected_indices[@]}" | sort -n | uniq))
+        
+        for index in "${unique_indices[@]}"; do
+            array_index=$((index-1))
+            config="${all_configs[$array_index]}"
+            config_original="${config//./ }"
+            selected_configs["$config"]="/opt/zapret/zapret.cfgs/configurations/$config_original"
+        done
+    fi
+    
+    if [[ ${#selected_configs[@]} -eq 0 ]]; then
+        echo -e "\e[31mНе выбрано ни одной стратегии.\e[0m"
+        main_menu
+    fi
+    
+    # Сохраняем в JSON
+    echo "{" > "$CONFIG_JSON"
+    first=true
+    for config_name in "${!selected_configs[@]}"; do
+        if [[ $first != true ]]; then
+            echo "," >> "$CONFIG_JSON"
+        fi
+        echo -n "  \"$config_name\": \"${selected_configs[$config_name]}\"" >> "$CONFIG_JSON"
+        first=false
+    done
+    echo -e "\n}" >> "$CONFIG_JSON"
+    
+    echo -e "\n\e[33mБудет проверено стратегий: ${#selected_configs[@]}\e[0m"
+    echo -e "\e[33mКоличество потоков: $threads\e[0m"
+    echo -e "\e[33mРазмер хостлиста: \e[32m$count записей\e[0m"
+    
+    # Предупреждение для больших хостлистов
+    if [[ $count -gt 500 ]]; then
+        echo -e "\e[31m⚠ Внимание: Большой хостлист! Тестирование может занять длительное время.\e[0m"
+    fi
+    
+    echo -e "\e[33mИспользуется оптимизированный Python-тестер...\e[0m"
+    echo -e "\e[36mСтатус будет отображаться в реальном времени.\e[0m"
+    echo -e "\e[33mВсе результаты сохраняются в файл лога.\e[0m"
+    echo -e "\e[33mДля выхода нажмите Ctrl+C.\e[0m"
+    
+    # Динамическая пауза в зависимости от размера листа
+    pause_time=3
+    if [[ $count -gt 1000 ]]; then
+        pause_time=5
+        echo -e "\e[31mОчень большой лист! Рекомендуется начать с меньшего количества стратегий.\e[0m"
+    fi
+    sleep $pause_time
+    
+    # Запускаем Python-тестер
+    clear
+    python3 /opt/zapret.installer/fastconfig.py "$CONFIG_JSON" "$LIST_PATH" --threads "$threads"
+    
+    # Убираем временный файл
+    rm -f "$CONFIG_JSON"
+    
+    echo -e "\n\e[32mТестирование завершено!\e[0m"
+    read -p "Нажмите Enter для продолжения..."
+    main_menu
+}
