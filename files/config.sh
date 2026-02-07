@@ -790,70 +790,216 @@ check_list() {
 
 
 # Добавляем новую функцию с поддержкой потоков
-# Добавляем новую функцию с поддержкой потоков
-fast_check_conf() {
-    echo -e "\e[36mВыберите хостлист для тестирования:\e[0m"
-    echo -e "\e[33mЦвета указывают на размер листа: \e[32m<500\e[0m | \e[33m<1000\e[0m | \e[31m>1000\e[0m\e[0m"
+check_conf() {
+    echo -e "\e[36mВыберите хостлист для тестирования (можно поменять в любой момент, запустив Меню управления запретом еще раз):\e[0m"
+    PS3="Введите номер листа (по умолчанию для тестирования 'list-simple.txt'): "
+    select LIST in $(for f in /opt/zapret/zapret.cfgs/lists/list*; do echo "$(basename "$f")"; done) "Отмена"; do
+        if [[ "$LIST" == "Отмена" ]]; then
+            main_menu
+        elif [[ -n "$LIST" ]]; then
+            LIST_PATH="/opt/zapret/zapret.cfgs/lists/$LIST"
+            rm -f /opt/zapret/ipset/zapret-hosts-user.txt
+            cp "$LIST_PATH" /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось скопировать хостлист"
+            echo -e "\e[32mХостлист '$LIST' установлен.\e[0m"
+            sleep 2
+            break
+        else
+            echo -e "\e[31mНеверный выбор, попробуйте снова.\e[0m"
+        fi
+    done
+    manage_service restart
+    check_list
     echo ""
     
-    # Создаем массивы для выбора
-    list_options=()
-    list_counts=()
-    list_paths=()
+    echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
+    echo -e "\e[33mМожно выбрать несколько стратегий через пробел или тире (например: '1 3 5' или '1-5' или '1-3 5 7-9')\e[0m"
+    echo ""
     
-    i=1
-    for f in /opt/zapret/zapret.cfgs/lists/list*; do
-        if [[ -f "$f" ]]; then
-            list_name=$(basename "$f")
-            # Подсчитываем строки (исключая комментарии и пустые строки)
-            count=$(grep -v '^#' "$f" | grep -v '^$' | wc -l)
-            list_counts[$i]=$count
-            list_paths[$i]="$f"
-            
-            # Выбираем цвет в зависимости от количества
-            if [[ $count -lt 500 ]]; then
-                color="\e[32m"  # зеленый
-            elif [[ $count -lt 1000 ]]; then
-                color="\e[33m"  # оранжевый/желтый
+    all_configs=($(for f in /opt/zapret/zapret.cfgs/configurations/*; do basename "$f" | tr ' ' '.'; done))
+    
+    if [[ ${#all_configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mНет доступных стратегий для проверки\e[0m"
+    fi
+    
+    PS3="Введите номера стратегий (через пробел или диапазоны): "
+    select _ in "${all_configs[@]}" "Выбрать все стратегии"; do
+        user_input="$REPLY"
+        if [[ -z "$user_input" ]] || [[ "$user_input" == $((${#all_configs[@]} + 1)) ]]; then
+            configs=("${all_configs[@]}")
+            echo -e "\e[33mБудут проверены ВСЕ стратегии.\e[0m"
+            break
+        fi
+        
+        selected_indices=()
+        valid_input=true
+        configs=()
+        read -ra parts <<< "$user_input"
+        
+        for part in "${parts[@]}"; do
+            if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                start="${BASH_REMATCH[1]}"
+                end="${BASH_REMATCH[2]}"
+                
+                if [[ $start -le 0 ]] || [[ $end -le 0 ]]; then
+                    echo -e "\e[31mОшибка: номера должны быть положительными числами (неверный диапазон: $part)\e[0m"
+                    valid_input=false
+                    continue
+                fi
+                
+                if [[ $start -gt $end ]]; then
+                    temp=$start
+                    start=$end
+                    end=$temp
+                fi
+                for ((i=start; i<=end; i++)); do
+                    if [[ $i -le ${#all_configs[@]} ]] && [[ $i -ge 1 ]]; then
+                        selected_indices+=("$i")
+                    fi
+                done
+            elif [[ "$part" =~ ^[0-9]+$ ]]; then
+                if [[ $part -le 0 ]]; then
+                    echo -e "\e[31mОшибка: номер должен быть положительным числом (неверный номер: $part)\e[0m"
+                    valid_input=false
+                    continue
+                fi
+                
+                if [[ $part -le ${#all_configs[@]} ]]; then
+                    selected_indices+=("$part")
+                else
+                    echo -e "\e[31mОшибка: номер $part превышает количество доступных стратегий (${#all_configs[@]})\e[0m"
+                    valid_input=false
+                fi
             else
-                color="\e[31m"  # красный
+                echo -e "\e[31mОшибка: неверный формат '$part'. Используйте числа или диапазоны (например: '1-5')\e[0m"
+                valid_input=false
             fi
+        done
+        
+        if [[ $valid_input == true ]] && [[ ${#selected_indices[@]} -gt 0 ]]; then
+            unique_indices=($(printf "%s\n" "${selected_indices[@]}" | sort -n | uniq))
             
-            list_options[$i]="${color}${list_name} ($count записей)\e[0m"
-            i=$((i+1))
+            configs=()
+            for index in "${unique_indices[@]}"; do
+                array_index=$((index-1))
+                configs+=("${all_configs[$array_index]}")
+            done
+            
+            echo ""
+            echo -e "\e[32mВыбрано стратегий: ${#configs[@]}\e[0m"
+            echo -e "\e[33mБудут проверены:\e[0m"
+            for i in "${!configs[@]}"; do
+                echo "$((i+1)). ${configs[$i]}"
+            done
+            break
+        elif [[ ${#selected_indices[@]} -eq 0 ]] && [[ $valid_input == true ]]; then
+            echo -e "\e[31mНе выбрано ни одной стратегии. Попробуйте снова.\e[0m"
+            echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
+            echo -e "\e[33mМожно выбрать несколько стратегий через пробел или диапазоны (например: '1 3 5' или '1-5' или '1-3 5 7-9')\e[0m"
+            echo -e "\e[33mОставьте пустым для проверки всех стратегий\e[0m"
+            PS3="Введите номера стратегий (через пробел или диапазоны): "
         fi
     done
     
-    if [[ ${#list_options[@]} -eq 0 ]]; then
-        echo -e "\e[31mНет доступных хостлистов!\e[0m"
-        sleep 2
-        main_menu
+    if [[ ${#configs[@]} -eq 0 ]]; then
+        error_exit "\e[31mНе выбрано ни одной стратегии для проверки\e[0m"
     fi
     
-    # Добавляем опцию отмены
-    list_options[$i]="Отмена"
-    
-    PS3="Введите номер листа: "
-    select LIST_DISPLAY in "${list_options[@]}"; do
-        if [[ "$LIST_DISPLAY" == "Отмена" ]]; then
-            main_menu
-        elif [[ -n "$LIST_DISPLAY" ]]; then
-            # Извлекаем имя файла из отформатированной строки
-            list_index=$REPLY
-            LIST_PATH="${list_paths[$list_index]}"
-            LIST=$(basename "$LIST_PATH")
-            count=${list_counts[$list_index]}
-            
-            # Определяем цвет для сообщения подтверждения
-            if [[ $count -lt 500 ]]; then
-                confirm_color="\e[32m"
-            elif [[ $count -lt 1000 ]]; then
-                confirm_color="\e[33m"
-            else
-                confirm_color="\e[31m"
+    echo -e "\e[33mБудет проверено стратегий: ${#configs[@]}\e[0m"
+    echo ""
+    echo -e "\e[36mНачинаем проверку всех стратегий...\e[0m"
+    echo -e "\e[36mЭто может занять много времени. Чтобы выйти, вы можете воспользоваться комбинацией клавиш CTRL+C. Продолжаю через 5 секунд...\e[0m"
+    sleep 5
+    stats_file="/tmp/zapret_final_stats_$$.txt"
+    > "$stats_file"
+    local best_config=""
+    local best_available=0
+    local total_domains=0
+    total_domains=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line=$(echo "$line" | sed 's/#.*//' | xargs)
+        [[ -n "$line" ]] && total_domains=$((total_domains + 1))
+    done < "$LIST_PATH"
+    for config in "${configs[@]}"; do
+        echo "──────────────────────────────────────────────────────────────────────────────"
+        echo ""
+        config_original="${config//./ }"
+        if ! apply_config "$config_original"; then
+            echo -e "\e[31mНе удалось применить стратегию: $config\e[0m"
+            echo ""
+            continue
+        fi
+        available=$(test_all_domains "$config" "$LIST_PATH" | tee /dev/tty | tail -1)
+        if [[ "$available" =~ ^[0-9]+$ ]]; then
+            echo "$config $available" >> "$stats_file"
+            if [[ $available -gt $best_available ]]; then
+                best_available=$available
+                best_config="$config"
             fi
-            
-            echo -e "${confirm_color}Выбран хостлист: $LIST ($count записей)\e[0m"
+        else
+            echo -e "\e[31mОшибка при тестировании стратегии: $config\e[0m"
+        fi
+    done
+    echo ""
+    echo -e "\e[42m\e[30m╔══════════════════════════════════════════════════════════════════════════╗\e[0m"
+    echo -e "\e[42m\e[30m║                           ИТОГОВЫЙ РЕЗУЛЬТАТ                             ║\e[0m"
+    echo -e "\e[42m\e[30m╠══════════════════════════════════════════════════════════════════════════╣\e[0m"
+    echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
+    printf "\e[42m\e[30m║  Лучшая стратегия:    %-50s ║\n\e[0m" "$best_config"
+    printf "\e[42m\e[30m║  Доступно доменов/IP: %-52s ║\n\e[0m" "$best_available из $total_domains ($(echo "scale=1; $best_available * 100 / $total_domains" | bc)%)"
+    echo -e "\e[42m\e[30m║                                                                          ║\e[0m"
+    echo -e "\e[42m\e[30m╚══════════════════════════════════════════════════════════════════════════╝\e[0m"
+    echo ""
+    echo -e "\e[33mПрименяем лучшую стратегию: $best_config\e[0m"
+    best_config_original="${best_config//./ }"
+    apply_config "$best_config_original"
+    sleep 3
+    if [[ -f "$stats_file" ]] && [[ $(wc -l < "$stats_file") -gt 0 ]]; then
+        echo ""
+        echo -e "\e[36mСтатистика по всем стратегиям:\e[0m"
+        echo "┌──────────────────────────────────────────────────────┐"
+        printf "│ %-30s │ %-10s │ %-6s │\n" "Стратегия" "Доступно" "%"
+        echo "├──────────────────────────────────────────────────────┤"
+        while read -r line; do
+            read -r config count <<< "$line"
+            if [[ "$count" =~ ^[0-9]+$ ]] && [[ $total_domains -gt 0 ]]; then
+                percentage=$(echo "scale=1; $count * 100 / $total_domains" | bc)
+                printf "│ %-30s │ %-10s │ %-5s%% │\n" "$config" "$count/$total_domains" "$percentage"
+            fi
+        done < "$stats_file"
+        echo "└──────────────────────────────────────────────────────┘"
+    fi
+    rm -f "$stats_file"
+    read -p "Нажмите Enter для продолжения..."
+    sleep 1
+}
+check_list() {
+    LINE_COUNT=$(wc -l < "/opt/zapret/ipset/zapret-hosts-user.txt" 2>/dev/null || echo "0")
+    if [ "$LINE_COUNT" = "0" ] && [ -s "/opt/zapret/ipset/zapret-hosts-user.txt" ]; then
+        LINE_COUNT=$(awk 'END{print NR}' "/opt/zapret/ipset/zapret-hosts-user.txt" 2>/dev/null || echo "0")
+    fi
+    if ! [[ "$LINE_COUNT" =~ ^[0-9]+$ ]]; then
+        echo "Ошибка: Не удалось подсчитать строки в файле"
+        exit 1
+    fi
+    echo "В выбраном листе $LINE_COUNT доменов/айпи."
+    if [ "$LINE_COUNT" -gt 100 ]; then
+        echo "Проверка может занять *ОЧЕНЬ* много времени!"
+        echo ""
+        read -p "Нажмите Enter для продолжения или Ctrl+C для отмены... "
+    fi
+}
+
+
+# Добавляем новую функцию с поддержкой потоков
+fast_check_conf() {
+    echo -e "\e[36mВыберите хостлист для тестирования:\e[0m"
+    PS3="Введите номер листа: "
+    select LIST in $(for f in /opt/zapret/zapret.cfgs/lists/list*; do echo "$(basename "$f")"; done) "Отмена"; do
+        if [[ "$LIST" == "Отмена" ]]; then
+            main_menu
+        elif [[ -n "$LIST" ]]; then
+            LIST_PATH="/opt/zapret/zapret.cfgs/lists/$LIST"
+            echo -e "\e[32mИспользуется хостлист: $LIST\e[0m"
             sleep 1
             break
         else
@@ -862,7 +1008,6 @@ fast_check_conf() {
     done
     
     # Запрашиваем количество потоков
-    echo ""
     read -p "Введите количество потоков для тестирования (рекомендуется 10-50): " threads
     threads=${threads:-10}
     
@@ -871,7 +1016,6 @@ fast_check_conf() {
         threads=10
     fi
     
-    echo ""
     echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
     echo -e "\e[33mМожно выбрать несколько через пробел или диапазоны (например: '1 3 5' или '1-5')\e[0m"
     
@@ -948,25 +1092,11 @@ fast_check_conf() {
     
     echo -e "\n\e[33mБудет проверено стратегий: ${#selected_configs[@]}\e[0m"
     echo -e "\e[33mКоличество потоков: $threads\e[0m"
-    echo -e "\e[33mРазмер хостлиста: \e[32m$count записей\e[0m"
-    
-    # Предупреждение для больших хостлистов
-    if [[ $count -gt 500 ]]; then
-        echo -e "\e[31m⚠ Внимание: Большой хостлист! Тестирование может занять длительное время.\e[0m"
-    fi
-    
     echo -e "\e[33mИспользуется оптимизированный Python-тестер...\e[0m"
     echo -e "\e[36mСтатус будет отображаться в реальном времени.\e[0m"
     echo -e "\e[33mВсе результаты сохраняются в файл лога.\e[0m"
     echo -e "\e[33mДля выхода нажмите Ctrl+C.\e[0m"
-    
-    # Динамическая пауза в зависимости от размера листа
-    pause_time=3
-    if [[ $count -gt 1000 ]]; then
-        pause_time=5
-        echo -e "\e[31mОчень большой лист! Рекомендуется начать с меньшего количества стратегий.\e[0m"
-    fi
-    sleep $pause_time
+    sleep 3
     
     # Запускаем Python-тестер
     clear
@@ -979,3 +1109,7 @@ fast_check_conf() {
     read -p "Нажмите Enter для продолжения..."
     main_menu
 }
+
+# Обновляем меню, чтобы добавить новую опцию
+# В main_menu добавьте:
+# echo "8) Быстрое тестирование стратегий с потоками (Python)" -> fast_check_conf
