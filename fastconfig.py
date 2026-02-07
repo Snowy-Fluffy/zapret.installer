@@ -440,8 +440,8 @@ def main_test(configs_to_test, hostlist_path, threads=10, apply_best=True):
             available, google_ping = test_strategy(config_name, config_path, hostlist_path, threads)
             stats.append((config_name, available, google_ping))
             
-            if i < total_configs - 1:
-                time.sleep(2)
+            # if i < total_configs - 1:
+            #     time.sleep(2)
     
     except KeyboardInterrupt:
         log_message(f"\n{Colors.RED}Тестирование прервано пользователем{Colors.END}", to_file=True)
@@ -537,11 +537,11 @@ def main_test(configs_to_test, hostlist_path, threads=10, apply_best=True):
     
     if output_file:
         output_file.close()
-        log_message(f"\n{Colors.BOLD}Полный лог сохранен в: {log_filename}{Colors.END}")
-        log_message(f"{Colors.YELLOW}Внимание: Файл содержит ANSI цвета. Для правильного отображения используйте:{Colors.END}")
-        log_message(f"{Colors.CYAN}  cat {log_filename}{Colors.END}")
-        log_message(f"{Colors.CYAN}  или{Colors.END}")
-        log_message(f"{Colors.CYAN}  less -R {log_filename}{Colors.END}")
+        print(f"\n{Colors.BOLD}Полный лог сохранен в: {log_filename}{Colors.END}")
+        print(f"{Colors.YELLOW}Внимание: Файл содержит ANSI цвета. Для правильного отображения используйте:{Colors.END}")
+        print(f"{Colors.CYAN}  cat {log_filename}{Colors.END}")
+        print(f"{Colors.CYAN}  или{Colors.END}")
+        print(f"{Colors.CYAN}  less -R {log_filename}{Colors.END}")
     
     clear_status()
     return best_strategy if stats else None
