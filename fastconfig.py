@@ -326,7 +326,7 @@ def test_strategy(strategy_name, strategy_path, hostlist_path, threads=10):
         with ThreadPoolExecutor(max_workers=threads) as executor:
             future_to_domain = {
                 executor.submit(test_domain, domain): domain 
-                for domain in domains[:200]
+                for domain in domains
             }
             
             completed = 0

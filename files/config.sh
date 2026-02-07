@@ -829,17 +829,81 @@ fast_check_conf() {
         main_menu
     fi
     
-    # Отображаем цветной список хостлистов
-    echo -e "\e[37mДоступные хостлисты:\e[0m"
+    # Создаем форматированные строки для отображения
+    local display_items=()
+    local plain_items=()
+    
     for idx in $(seq 0 $((i-1))); do
-        echo -e "  ${list_colors[$idx]}$((idx+1))) ${list_names[$idx]} (${list_counts[$idx]} записей)\e[0m"
+        local item_text="${list_colors[$idx]}$((idx+1))) ${list_names[$idx]} (${list_counts[$idx]} записей)\e[0m"
+        local plain_text="$((idx+1))) ${list_names[$idx]} (${list_counts[$idx]} записей)"
+        display_items[$idx]="$item_text"
+        plain_items[$idx]="$plain_text"
     done
-    echo -e "  \e[37m$((i+1))) Отмена\e[0m"
+    
+    # Добавляем опцию отмены
+    local cancel_idx=$i
+    local cancel_text="\e[37m$((cancel_idx+1))) Отмена\e[0m"
+    local cancel_plain="$((cancel_idx+1))) Отмена"
+    display_items[$cancel_idx]="$cancel_text"
+    plain_items[$cancel_idx]="$cancel_plain"
+    
+    local total_items=$((i+1))
+    
+    # Определяем ширину терминала
+    local term_width=$(tput cols 2>/dev/null || echo 80)
+    
+    # Находим максимальную длину элемента (без цветовых кодов)
+    local max_len=0
+    for plain_item in "${plain_items[@]}"; do
+        local item_len=${#plain_item}
+        if [[ $item_len -gt $max_len ]]; then
+            max_len=$item_len
+        fi
+    done
+    
+    # Добавляем отступ между колонками
+    local column_padding=8
+    
+    # Вычисляем сколько колонок поместится
+    local columns=$(( (term_width + column_padding) / (max_len + column_padding) ))
+    if [[ $columns -lt 1 ]]; then
+        columns=1
+    elif [[ $columns -gt 4 ]]; then
+        columns=4  # Ограничиваем максимум 4 колонками для читаемости
+    fi
+    
+    # Вычисляем количество строк
+    local rows=$(( (total_items + columns - 1) / columns ))
+    
+    # Отображаем заголовок
+    echo -e "\e[37mДоступные хостлисты:\e[0m"
+    echo ""
+    
+    # Отображаем элементы в несколько колонок
+    for ((row=0; row<rows; row++)); do
+        for ((col=0; col<columns; col++)); do
+            local index=$((row + col * rows))
+            
+            if [[ $index -lt $total_items ]]; then
+                # Выводим элемент
+                echo -ne "${display_items[$index]}"
+                
+                # Добавляем отступ до следующей колонки
+                if [[ $col -lt $((columns-1)) ]]; then
+                    local current_item_len=${#plain_items[$index]}
+                    local spaces_needed=$((max_len - current_item_len + column_padding))
+                    printf "%${spaces_needed}s" ""
+                fi
+            fi
+        done
+        echo ""  # Переход на новую строку
+    done
+    
     echo ""
     
     # Запрашиваем выбор пользователя
     while true; do
-        read -p "Введите номер листа (1-$((i+1))): " choice
+        read -p "Введите номер листа (1-$total_items): " choice
         
         # Проверяем валидность ввода
         if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
@@ -847,10 +911,10 @@ fast_check_conf() {
             continue
         fi
         
-        if [[ $choice -eq $((i+1)) ]]; then
+        if [[ $choice -eq $total_items ]]; then
             # Отмена
             main_menu
-        elif [[ $choice -ge 1 ]] && [[ $choice -le $i ]]; then
+        elif [[ $choice -ge 1 ]] && [[ $choice -le $((total_items-1)) ]]; then
             # Выбран существующий лист
             local list_index=$((choice-1))
             LIST_PATH="${list_paths[$list_index]}"
@@ -870,10 +934,10 @@ fast_check_conf() {
             sleep 1
             break
         else
-            echo -e "\e[31mНеверный выбор. Пожалуйста, введите число от 1 до $((i+1)).\e[0m"
+            echo -e "\e[31mНеверный выбор. Пожалуйста, введите число от 1 до $total_items.\e[0m"
         fi
     done
-
+    
     # Запрашиваем количество потоков
     echo ""
     read -p "Введите количество потоков для тестирования (рекомендуется 10-50): " threads
@@ -893,10 +957,54 @@ fast_check_conf() {
         all_configs+=("$(basename "$f" | tr ' ' '.')")
     done
     
-    # Показываем список стратегий
+    # Показываем список стратегий в несколько колонок
     echo -e "\n\e[34mДоступные стратегии:\e[0m"
-    for i in "${!all_configs[@]}"; do
-        echo -e "\e[37m$((i+1)). ${all_configs[i]}\e[0m"
+    
+    # Форматируем стратегии для отображения
+    local strategy_items=()
+    local strategy_plain=()
+    for idx in "${!all_configs[@]}"; do
+        strategy_items[$idx]="\e[37m$((idx+1)). ${all_configs[idx]}\e[0m"
+        strategy_plain[$idx]="$((idx+1)). ${all_configs[idx]}"
+    done
+    
+    # Находим максимальную длину для стратегий
+    local max_strategy_len=0
+    for plain_item in "${strategy_plain[@]}"; do
+        local item_len=${#plain_item}
+        if [[ $item_len -gt $max_strategy_len ]]; then
+            max_strategy_len=$item_len
+        fi
+    done
+    
+    # Вычисляем сколько колонок для стратегий
+    local strategy_columns=$(( (term_width + column_padding) / (max_strategy_len + column_padding) ))
+    if [[ $strategy_columns -lt 1 ]]; then
+        strategy_columns=1
+    elif [[ $strategy_columns -gt 3 ]]; then
+        strategy_columns=3
+    fi
+    
+    local strategy_rows=$(( (${#all_configs[@]} + strategy_columns - 1) / strategy_columns ))
+    
+    # Отображаем стратегии в несколько колонок
+    for ((row=0; row<strategy_rows; row++)); do
+        for ((col=0; col<strategy_columns; col++)); do
+            local index=$((row + col * strategy_rows))
+            
+            if [[ $index -lt ${#all_configs[@]} ]]; then
+                # Выводим элемент
+                echo -ne "${strategy_items[$index]}"
+                
+                # Добавляем отступ до следующей колонки
+                if [[ $col -lt $((strategy_columns-1)) ]]; then
+                    local current_item_len=${#strategy_plain[$index]}
+                    local spaces_needed=$((max_strategy_len - current_item_len + column_padding))
+                    printf "%${spaces_needed}s" ""
+                fi
+            fi
+        done
+        echo ""
     done
     
     echo -e "\n\e[33mОставьте пустым для тестирования ВСЕХ стратегий\e[0m"
@@ -961,11 +1069,20 @@ fast_check_conf() {
     
     echo -e "\n\e[33mБудет проверено стратегий: ${#selected_configs[@]}\e[0m"
     echo -e "\e[33mКоличество потоков: $threads\e[0m"
-    echo -e "\e[33mРазмер хостлиста: \e[32m$count записей\e[0m"
+    echo -e "\e[33mРазмер хостлиста: "
+    
+    # Показываем размер хостлиста соответствующим цветом
+    if [[ $count -lt 500 ]]; then
+        echo -e "\e[32m$count записей\e[0m"
+    elif [[ $count -lt 1000 ]]; then
+        echo -e "\e[33m$count записей\e[0m"
+    else
+        echo -e "\e[31m$count записей\e[0m"
+    fi
     
     # Предупреждение для больших хостлистов
     if [[ $count -gt 500 ]]; then
-        echo -e "\e[31m⚠ Внимание: Большой хостлист! Тестирование может занять длительное время.\e[0m"
+        echo -e "\e[33m⚠ Внимание: Большой хостлист! Тестирование может занять длительное время.\e[0m"
     fi
     
     echo -e "\e[33mИспользуется оптимизированный Python-тестер...\e[0m"
