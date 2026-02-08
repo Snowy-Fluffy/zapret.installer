@@ -939,15 +939,22 @@ fast_check_conf() {
     done
     
     # Запрашиваем количество потоков
+if (( count > 500 )); then
     echo ""
-    read -p "Введите количество потоков для тестирования (рекомендуется 10-50): " threads
-    threads=${threads:-10}
+    read -r -p "Введите количество потоков для тестирования (рекомендуется 100-1000) [Default: 100]: " threads
     
-    if ! [[ "$threads" =~ ^[0-9]+$ ]] || [ "$threads" -lt 1 ] || [ "$threads" -gt 100 ]; then
-        echo -e "\e[31mНекорректное количество потоков. Используется 10.\e[0m"
-        threads=10
+    # Set default to 100 if user presses Enter (Your original code had 10, but 100 is safer for large lists)
+    threads=${threads:-100}
+
+    # Validate: Must be a number AND greater than 0
+    if ! [[ "$threads" =~ ^[0-9]+$ ]] || (( threads < 1 )); then
+        echo -e "\e[31mНекорректное количество потоков. Используется 100.\e[0m"
+        threads=100
     fi
-    
+else 
+    threads=$count
+fi
+
     echo ""
     echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
     echo -e "\e[33mМожно выбрать несколько через пробел или диапазоны (например: '1 3 5' или '1-5')\e[0m"
