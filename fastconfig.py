@@ -1,573 +1,526 @@
 #!/usr/bin/env python3
 """
-Ускоренный тестер стратегий для Zapret с live-статусом и управлением потоками
+Zapret Strategy Tester - Accelerated
+
 """
 
-import subprocess
-import time
-import threading
-import os
 import sys
-import re
+import os
+import time
+import subprocess
 import json
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
+import re
 import shutil
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from datetime import datetime
-from collections import OrderedDict, defaultdict
+from pathlib import Path
+from typing import List, Dict, Optional, Tuple, Any, Callable
+from enum import Enum
 
-# Глобальная переменная для статуса
-current_status = {"strategy": "", "domain": "", "phase": "idle", "progress": ""}
-status_lock = threading.Lock()
-output_file = None
+# --- Constants ---
+ZAPRET_CONFIG_PATH = Path("/opt/zapret/config")
+DEFAULT_TIMEOUT = 3
+DEFAULT_THREADS = 1000
 
-# ANSI коды цветов
+# --- Models / Data Structures ---
+
+@dataclass
+class NetworkMetric:
+    """Holds the result of a single network test."""
+    raw_value: Any  # float for ping, int for http code, etc.
+    formatted: str
+    is_success: bool
+    details: str = ""
+
+@dataclass
+class DomainResult:
+    """Holds the testing results for a specific domain."""
+    domain: str
+    ping: NetworkMetric
+    http: NetworkMetric
+    tls12: NetworkMetric
+    tls13: NetworkMetric
+    is_available: bool
+
+@dataclass
+class StrategyStats:
+    """Aggregated statistics for a specific strategy."""
+    name: str
+    config_path: str
+    total_checked: int = 0
+    available_count: int = 0
+    google_latency: float = float('inf')
+    domain_results: List[DomainResult] = field(default_factory=list)
+
+    @property
+    def success_rate(self) -> float:
+        if self.total_checked == 0:
+            return 0.0
+        return (self.available_count / self.total_checked) * 100
+
+# --- UI & Presentation Layer ---
+
 class Colors:
+    """ANSI Color codes."""
     RED = '\033[91m'
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
     BLUE = '\033[94m'
-    MAGENTA = '\033[95m'
     CYAN = '\033[96m'
     WHITE = '\033[97m'
     BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
     END = '\033[0m'
-    GRAY = '\033[90m'
+    RESET_LINE = '\r\033[K'
 
-def log_message(message, color="", to_file=True, end="\n"):
-    """Логирует сообщение с цветом в консоль и файл (с цветами)"""
-    if output_file and to_file:
-        # Сохраняем сообщение с цветами в файл
-        output_file.write(message + end)
-        output_file.flush()
-    
-    # Выводим в консоль с цветом
-    print(f"{color}{message}{Colors.END}", end=end)
+class ConsoleRenderer:
+    """Handles all user output, logging, and formatting."""
 
-def update_status(strategy=None, domain=None, phase=None, progress=None):
-    """Обновляет статус выполнения"""
-    with status_lock:
-        if strategy is not None:
-            current_status["strategy"] = strategy
-        if domain is not None:
-            current_status["domain"] = domain[:40]
-        if phase is not None:
-            current_status["phase"] = phase
-        if progress is not None:
-            current_status["progress"] = progress
-    
-    # Выводим одну строку статуса
-    status_line = f"\r\033[K{Colors.CYAN}strategy:{Colors.END} {current_status['strategy'][:15]:15} | " \
-                  f"{Colors.CYAN}status:{Colors.END} {current_status['phase']:12} " \
-                  f"{current_status['domain'][:30]:30} | " \
-                  f"{Colors.CYAN}progress:{Colors.END} {current_status['progress']:10}"
-    sys.stderr.write(status_line)
-    sys.stderr.flush()
+    def __init__(self, log_path: Path):
+        self.log_path = log_path
+        self._setup_logging()
 
-def clear_status():
-    """Очищает строку статуса"""
-    sys.stderr.write("\r\033[K")
-    sys.stderr.flush()
-
-def test_ping(domain, timeout=2):
-    """Тест ping с таймаутом"""
-    try:
-        result = subprocess.run(
-            ["ping", "-c", "2", "-W", str(timeout), domain],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 1
-        )
-        if result.returncode == 0:
-            match = re.search(r"min/avg/max/mdev = [\d\.]+/([\d\.]+)/", result.stdout)
-            if match:
-                ping_time = float(match.group(1))
-                return f"{ping_time:.1f}ms", True, ping_time
-        return "FAIL", False, float('inf')
-    except:
-        return "FAIL", False, float('inf')
-
-def test_google_ping():
-    """Тест ping до Google для измерения базовой задержки стратегии"""
-    try:
-        result = subprocess.run(
-            ["ping", "-c", "4", "-W", "2", "google.com"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            match = re.search(r"min/avg/max/mdev = [\d\.]+/([\d\.]+)/", result.stdout)
-            if match:
-                return float(match.group(1))
-        return float('inf')
-    except:
-        return float('inf')
-
-def test_http(domain, timeout=5):
-    """Тест HTTP соединения"""
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", 
-             "-m", str(timeout), f"http://{domain}"],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 1
-        )
-        if result.returncode == 0 and result.stdout.isdigit():
-            return f"HTTP:{result.stdout}"
-        return "FAIL"
-    except:
-        return "FAIL"
-
-def test_https(domain, timeout=5, tls_version="tlsv1.2"):
-    """Тест HTTPS с указанной версией TLS"""
-    tls_flag = f"--{tls_version}"
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
-             "-m", str(timeout), tls_flag, f"https://{domain}"],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 1
-        )
-        if result.returncode == 0 and result.stdout.isdigit():
-            return f"{tls_version.upper()}:{result.stdout}"
-        return "FAIL"
-    except:
-        return "FAIL"
-
-def test_domain(domain, timeout=5):
-    """Тестирует домен с оптимизацией"""
-    domain = domain.strip()
-    if not domain or domain.startswith('#'):
-        return domain, ["FAIL", "FAIL", "FAIL", "FAIL", 0]
-    
-    is_ip = re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', domain)
-    
-    ping_result, ping_success, ping_time = test_ping(domain, timeout if is_ip else 2)
-    
-    if not ping_success:
-        return domain, ["FAIL", "FAIL", "FAIL", "FAIL", 0], ping_time
-    
-    if is_ip:
-        return domain, [ping_result, "N/A", "N/A", "N/A", 1], ping_time
-    
-    http_result = test_http(domain, timeout)
-    tls12_result = test_https(domain, timeout, "tlsv1.2")
-    tls13_result = test_https(domain, timeout, "tlsv1.3")
-    
-    # Исправлено: теперь проверяем как "TLS1.2", так и "TLSV1.2"
-    tls12_ok = (tls12_result.startswith("TLS1.2:2") or tls12_result.startswith("TLS1.2:3") or
-                tls12_result.startswith("TLSV1.2:2") or tls12_result.startswith("TLSV1.2:3"))
-    tls13_ok = (tls13_result.startswith("TLS1.3:2") or tls13_result.startswith("TLS1.3:3") or
-                tls13_result.startswith("TLSV1.3:2") or tls13_result.startswith("TLSV1.3:3"))
-    available = 1 if tls12_ok or tls13_ok else 0
-    
-    return domain, [ping_result, http_result, tls12_result, tls13_result, available], ping_time
-
-def apply_config(config_path, fwtype="nftables"):
-    """Применяет конфигурацию с использованием systemctl"""
-    try:
-        shutil.copy(config_path, "/opt/zapret/config")
-        
-        with open("/opt/zapret/config", 'r') as f:
-            lines = f.readlines()
-        
-        with open("/opt/zapret/config", 'w') as f:
-            for line in lines:
-                if line.startswith("FWTYPE="):
-                    f.write(f"FWTYPE={fwtype}\n")
-                else:
-                    f.write(line)
-        
-        subprocess.run(
-            ["systemctl", "restart", "zapret"], 
-            check=True, 
-            capture_output=True,
-            text=True
-        )
-        
-        time.sleep(2)
-        return True
-    except:
-        return False
-
-def colorize_result(result):
-    """Добавляет цвет к результату теста"""
-    if result == "FAIL":
-        return f"{Colors.RED}{result}{Colors.END}"
-    elif "ms" in result:
+    def _setup_logging(self):
+        """Sets up file logging."""
         try:
-            ms = float(result.replace("ms", ""))
-            if ms < 50:
-                return f"{Colors.GREEN}{result}{Colors.END}"
-            elif ms < 200:
-                return f"{Colors.YELLOW}{result}{Colors.END}"
-            else:
-                return f"{Colors.RED}{result}{Colors.END}"
-        except:
-            return f"{Colors.WHITE}{result}{Colors.END}"
-    # Исправлено: теперь обрабатываем как "TLS1.2", так и "TLSV1.2"
-    elif (result.startswith(("HTTP:2", "HTTP:3", "TLS1.2:2", "TLS1.2:3", "TLS1.3:2", "TLS1.3:3")) or
-          result.startswith(("TLSV1.2:2", "TLSV1.2:3", "TLSV1.3:2", "TLSV1.3:3"))):
-        return f"{Colors.GREEN}{result}{Colors.END}"
-    elif result == "N/A":
-        return f"{Colors.BLUE}{result}{Colors.END}"
-    else:
-        return f"{Colors.RED}{result}{Colors.END}"
+            # We use a custom raw logger to handle the specific formatting requirements
+            # of the original script (writing ANSI codes to file as per request)
+            self.log_file = open(self.log_path, 'w', encoding='utf-8')
+            self.log_file.write('\ufeff')  # BOM
+        except IOError as e:
+            print(f"{Colors.RED}Failed to create log file: {e}{Colors.END}")
+            self.log_file = None
 
-def print_results_table(strategy_name, results, total_tested, total_available, google_ping):
-    """Выводит таблицу результатов один раз в конце тестирования стратегии"""
-    clear_status()
-    
-    # Выводим заголовок таблицы
-    separator = f"{Colors.CYAN}{'='*90}{Colors.END}"
-    title = f"{Colors.BOLD}{Colors.CYAN}РЕЗУЛЬТАТЫ СТРАТЕГИИ: {strategy_name}{Colors.END}"
-    header = f"{Colors.BOLD}{Colors.WHITE}{'Домен/IP':<40} {'Ping':<10} {'HTTP':<10} {'TLS1.2':<10} {'TLS1.3':<10}{Colors.END}"
-    
-    log_message(f"\n{separator}")
-    log_message(title)
-    
-    if google_ping < float('inf'):
-        ping_color = Colors.GREEN if google_ping < 50 else Colors.YELLOW if google_ping < 200 else Colors.RED
-        log_message(f"{Colors.CYAN}Базовая задержка (google.com): {ping_color}{google_ping:.1f}ms{Colors.END}")
-    
-    log_message(separator)
-    log_message(header)
-    log_message(f"{Colors.CYAN}{'-'*90}{Colors.END}")
-    
-    # Выводим результаты
-    max_display = 30
-    if len(results) > max_display:
-        display_results = list(results.items())[:20]
-        skipped = len(results) - 30
-        
-        for domain, metrics in display_results:
-            display_domain = domain[:38] + "..." if len(domain) > 38 else domain
-            row = f"{Colors.WHITE}{display_domain:<40}{Colors.END} " \
-                  f"{colorize_result(metrics[0]):<10} " \
-                  f"{colorize_result(metrics[1]):<10} " \
-                  f"{colorize_result(metrics[2]):<10} " \
-                  f"{colorize_result(metrics[3]):<10}"
-            log_message(row, to_file=True)
-        
-        if skipped > 0:
-            log_message(f"\n{Colors.YELLOW}... пропущено {skipped} результатов ...{Colors.END}", to_file=True)
-        
-        display_results = list(results.items())[-10:]
-        for domain, metrics in display_results:
-            display_domain = domain[:38] + "..." if len(domain) > 38 else domain
-            row = f"{Colors.WHITE}{display_domain:<40}{Colors.END} " \
-                  f"{colorize_result(metrics[0]):<10} " \
-                  f"{colorize_result(metrics[1]):<10} " \
-                  f"{colorize_result(metrics[2]):<10} " \
-                  f"{colorize_result(metrics[3]):<10}"
-            log_message(row, to_file=True)
-    else:
-        for domain, metrics in results.items():
-            display_domain = domain[:38] + "..." if len(domain) > 38 else domain
-            row = f"{Colors.WHITE}{display_domain:<40}{Colors.END} " \
-                  f"{colorize_result(metrics[0]):<10} " \
-                  f"{colorize_result(metrics[1]):<10} " \
-                  f"{colorize_result(metrics[2]):<10} " \
-                  f"{colorize_result(metrics[3]):<10}"
-            log_message(row, to_file=True)
-    
-    log_message(f"{Colors.CYAN}{'-'*90}{Colors.END}")
-    
-    # Статистика
-    percentage = (total_available / total_tested * 100) if total_tested > 0 else 0
-    if percentage > 70:
-        status_color = Colors.GREEN
-        status_icon = "✓"
-    elif percentage > 30:
-        status_color = Colors.YELLOW
-        status_icon = "⚠"
-    else:
-        status_color = Colors.RED
-        status_icon = "✗"
-    
-    stats_msg = f"{status_color}{status_icon} {Colors.BOLD}Доступно:{Colors.END} " \
-                f"{status_color}{total_available}/{total_tested}{Colors.END} " \
-                f"{Colors.BOLD}доменов/IP ({percentage:.1f}%){Colors.END}"
-    
-    log_message(stats_msg, to_file=True)
-    log_message(f"{Colors.CYAN}{'='*90}{Colors.END}\n")
+    def log(self, message: str, color: str = "", end: str = "\n", to_file: bool = True):
+        """Print to console and write to file."""
+        # Console output
+        sys.stdout.write(f"{color}{message}{Colors.END}{end}")
+        sys.stdout.flush()
 
-def test_strategy(strategy_name, strategy_path, hostlist_path, threads=10):
-    """Тестирует одну стратегию на всем хостлисте"""
-    update_status(strategy=strategy_name, phase="начало", progress="0%")
-    
-    # Измеряем базовую задержку до google.com
-    google_ping = test_google_ping()
-    
-    # Читаем хостлист
-    try:
-        with open(hostlist_path, 'r') as f:
-            domains = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    except Exception as e:
-        log_message(f"Ошибка чтения хостлиста: {e}", Colors.RED, to_file=True)
-        return 0, float('inf')
-    
-    total = len(domains)
-    if total == 0:
-        log_message("Хостлист пуст!", Colors.RED, to_file=True)
-        return 0, google_ping
-    
-    available = 0
-    results = OrderedDict()
-    ping_times = []
-    
-    # Тестируем домены
-    try:
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            future_to_domain = {
-                executor.submit(test_domain, domain): domain 
-                for domain in domains
-            }
+        # File output (strip colors if needed, but original req kept them)
+        if self.log_file and to_file:
+            self.log_file.write(f"{message}{end}")
+            self.log_file.flush()
+
+    def close(self):
+        if self.log_file:
+            self.log_file.close()
+
+    def print_banner(self, config_count: int, threads: int, hostlist: str):
+        self.log(f"{Colors.BOLD}{Colors.CYAN}Zapret Strategy Tester{Colors.END}")
+        self.log(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", Colors.WHITE)
+        self.log(f"Log: {self.log_path}", Colors.WHITE)
+        self.log(f"Threads: {threads}", Colors.WHITE)
+        self.log(f"Hostlist: {hostlist}", Colors.WHITE)
+        self.log(f"Strategies: {config_count}", Colors.WHITE)
+        self.log(f"{Colors.CYAN}{'=' * 50}{Colors.END}")
+
+    def update_status(self, strategy: str, phase: str, domain: str, progress: str):
+        """Updates the dynamic status line."""
+        # Truncate for display
+        strat_disp = (strategy[:15] + '..') if len(strategy) > 15 else strategy
+        dom_disp = (domain[:30] + '..') if len(domain) > 30 else domain
+        
+        status_line = (
+            f"{Colors.RESET_LINE}"
+            f"{Colors.CYAN}strategy:{Colors.END} {strat_disp:<17} | "
+            f"{Colors.CYAN}status:{Colors.END} {phase:<12} "
+            f"{dom_disp:<32} | "
+            f"{Colors.CYAN}progress:{Colors.END} {progress:<10}"
+        )
+        sys.stderr.write(status_line)
+        sys.stderr.flush()
+
+    def clear_status(self):
+        sys.stderr.write(Colors.RESET_LINE)
+        sys.stderr.flush()
+
+    def _colorize_metric(self, metric: NetworkMetric) -> str:
+        if not metric.is_success:
+            return f"{Colors.RED}{metric.formatted}{Colors.END}"
+        
+        # Ping Logic
+        if "ms" in metric.formatted:
+            val = metric.raw_value
+            if val < 50: return f"{Colors.GREEN}{metric.formatted}{Colors.END}"
+            if val < 200: return f"{Colors.YELLOW}{metric.formatted}{Colors.END}"
+            return f"{Colors.RED}{metric.formatted}{Colors.END}"
+        
+        # HTTP/TLS Logic
+        if metric.is_success:
+            return f"{Colors.GREEN}{metric.formatted}{Colors.END}"
+        
+        return f"{Colors.WHITE}{metric.formatted}{Colors.END}"
+
+    def show_strategy_results(self, stats: StrategyStats):
+        self.clear_status()
+        
+        sep = f"{Colors.CYAN}{'='*90}{Colors.END}"
+        self.log(f"\n{sep}")
+        self.log(f"{Colors.BOLD}{Colors.CYAN}STRATEGY RESULTS: {stats.name}{Colors.END}")
+        
+        # Show Baseline
+        if stats.google_latency < float('inf'):
+            p_color = Colors.GREEN if stats.google_latency < 50 else Colors.YELLOW
+            self.log(f"Baseline (google.com): {p_color}{stats.google_latency:.1f}ms{Colors.END}")
+        
+        header = f"{Colors.BOLD}{Colors.WHITE}{'Domain/IP':<40} {'Ping':<10} {'HTTP':<10} {'TLS1.2':<10} {'TLS1.3':<10}{Colors.END}"
+        self.log(sep)
+        self.log(header)
+        self.log(f"{Colors.CYAN}{'-'*90}{Colors.END}")
+
+        # Limit output to prevent spamming
+        display_items = stats.domain_results
+        if len(display_items) > 30:
+            display_items = display_items[:20] + display_items[-10:]
+            skipped = True
+        else:
+            skipped = False
+
+        for i, res in enumerate(display_items):
+            if skipped and i == 20:
+                self.log(f"{Colors.YELLOW}... {len(stats.domain_results) - 30} hidden ...{Colors.END}")
             
-            completed = 0
+            d_str = (res.domain[:38] + "..") if len(res.domain) > 38 else res.domain
+            row = (
+                f"{Colors.WHITE}{d_str:<40}{Colors.END} "
+                f"{self._colorize_metric(res.ping):<10} "
+                f"{self._colorize_metric(res.http):<10} "
+                f"{self._colorize_metric(res.tls12):<10} "
+                f"{self._colorize_metric(res.tls13):<10}"
+            )
+            self.log(row)
+
+        self.log(f"{Colors.CYAN}{'-'*90}{Colors.END}")
+        
+        # Summary
+        pct = stats.success_rate
+        icon = "✓" if pct > 70 else ("⚠" if pct > 30 else "✗")
+        color = Colors.GREEN if pct > 70 else (Colors.YELLOW if pct > 30 else Colors.RED)
+        
+        self.log(
+            f"{color}{icon} {Colors.BOLD}Available:{Colors.END} "
+            f"{color}{stats.available_count}/{stats.total_checked}{Colors.END} "
+            f"{Colors.BOLD}({pct:.1f}%){Colors.END}"
+        )
+        self.log(f"{Colors.CYAN}{'='*90}{Colors.END}\n")
+
+    def show_final_summary(self, all_stats: List[StrategyStats]):
+        self.clear_status()
+        self.log(f"\n{Colors.CYAN}{'='*90}{Colors.END}")
+        self.log(f"{Colors.BOLD}{Colors.CYAN}FINAL SUMMARY{Colors.END}")
+        self.log(f"{Colors.CYAN}{'='*90}{Colors.END}")
+        
+        header = f"{Colors.BOLD}{Colors.WHITE}{'#':<3} {'Strategy':<30} {'Avail':>10} {'%':>8} {'Ping':>12} {'Rating':<10}{Colors.END}"
+        self.log(header)
+        self.log(f"{Colors.CYAN}{'-'*90}{Colors.END}")
+
+        for idx, stat in enumerate(all_stats, 1):
+            pct = stat.success_rate
+            
+            # Determine Color/Rating
+            if idx == 1:
+                color = Colors.GREEN
+                rating = "BEST"
+            elif pct > 80:
+                color = Colors.GREEN
+                rating = "EXCELLENT"
+            elif pct > 60:
+                color = Colors.YELLOW
+                rating = "GOOD"
+            elif pct > 40:
+                color = Colors.YELLOW
+                rating = "AVERAGE"
+            else:
+                color = Colors.RED
+                rating = "POOR"
+
+            ping_str = f"{stat.google_latency:.1f}ms" if stat.google_latency < float('inf') else "N/A"
+            strat_name = (stat.name[:28] + "..") if len(stat.name) > 28 else stat.name
+            
+            row = (
+                f"{color}{idx:<3}{Colors.END} "
+                f"{color}{strat_name:<30}{Colors.END} "
+                f"{color}{stat.available_count:>10}{Colors.END} "
+                f"{color}{pct:>7.1f}%{Colors.END} "
+                f"{color}{ping_str:>12}{Colors.END} "
+                f"{color}{rating:<10}{Colors.END}"
+            )
+            self.log(row)
+
+# --- Logic Layer: System Operations ---
+
+class SystemController:
+    """Handles OS-level interactions (firewall, services, files)."""
+
+    @staticmethod
+    def detect_fw_type() -> str:
+        try:
+            res = subprocess.run(["iptables", "--version"], capture_output=True, text=True)
+            if "legacy" in res.stdout:
+                return "iptables"
+        except FileNotFoundError:
+            pass
+        return "nftables" # Default to nftables for modern systems
+
+    @staticmethod
+    def apply_config(config_source: str, fw_type: str) -> bool:
+        """Copies config and restarts Zapret."""
+        try:
+            shutil.copy(config_source, ZAPRET_CONFIG_PATH)
+            
+            # Inject FWTYPE if needed
+            with open(ZAPRET_CONFIG_PATH, 'r') as f:
+                lines = f.readlines()
+            
+            with open(ZAPRET_CONFIG_PATH, 'w') as f:
+                for line in lines:
+                    if line.startswith("FWTYPE="):
+                        f.write(f"FWTYPE={fw_type}\n")
+                    else:
+                        f.write(line)
+            
+            subprocess.run(
+                ["systemctl", "restart", "zapret"],
+                check=True, capture_output=True, text=True
+            )
+            time.sleep(2) # Wait for service to settle
+            return True
+        except Exception:
+            return False
+
+# --- Logic Layer: Network Testing ---
+
+class NetworkTester:
+    """Performs raw network operations."""
+
+    @staticmethod
+    def ping(host: str, timeout: int = 2) -> Tuple[float, bool]:
+        """Returns (ms, success)."""
+        try:
+            cmd = ["ping", "-c", "2", "-W", str(timeout), host]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout+1)
+            
+            if res.returncode == 0:
+                match = re.search(r"min/avg/max/mdev = [\d\.]+/([\d\.]+)/", res.stdout)
+                if match:
+                    return float(match.group(1)), True
+            return float('inf'), False
+        except subprocess.TimeoutExpired:
+            return float('inf'), False
+        except Exception:
+            return float('inf'), False
+
+    @staticmethod
+    def check_http(url: str, timeout: int = 5) -> Tuple[str, bool]:
+        """Returns (http_code_str, success)."""
+        try:
+            cmd = [
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                "-m", str(timeout), url
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout+1)
+            if res.returncode == 0 and res.stdout.isdigit():
+                return res.stdout, True
+            return "FAIL", False
+        except Exception:
+            return "FAIL", False
+
+    @staticmethod
+    def check_tls(domain: str, version: str, timeout: int = 5) -> Tuple[str, bool]:
+        """Returns (result_string, success)."""
+        tls_flag = f"--{version}"
+        url = f"https://{domain}"
+        try:
+            cmd = [
+                "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+                "-m", str(timeout), tls_flag, url
+            ]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout+1)
+            
+            # Check logic adapted from original script
+            if res.returncode == 0 and res.stdout.isdigit():
+                return f"{version.upper()}:{res.stdout}", True
+            return "FAIL", False
+        except Exception:
+            return "FAIL", False
+
+    @classmethod
+    def analyze_domain(cls, domain: str, timeout: int) -> DomainResult:
+        """Runs a full battery of tests on a domain."""
+        domain = domain.strip()
+        
+        # 1. Ping
+        ping_ms, ping_ok = cls.ping(domain, timeout=2)
+        ping_metric = NetworkMetric(
+            ping_ms, f"{ping_ms:.1f}ms" if ping_ok else "FAIL", ping_ok
+        )
+
+        # Optimization: If ping fails (and it's an IP), mostly likely dead
+        is_ip = bool(re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', domain))
+        
+        if not ping_ok and is_ip:
+            # Short circuit for dead IPs
+            fail = NetworkMetric(0, "FAIL", False)
+            return DomainResult(domain, ping_metric, fail, fail, fail, False)
+
+        if is_ip:
+            # IPs don't need HTTP/TLS checks usually in this context
+            na = NetworkMetric(0, "N/A", True) # Treated as neutral/pass
+            return DomainResult(domain, ping_metric, na, na, na, True)
+
+        # 2. HTTP
+        http_code, http_ok = cls.check_http(f"http://{domain}", timeout)
+        http_metric = NetworkMetric(
+            int(http_code) if http_code.isdigit() else 0,
+            f"HTTP:{http_code}",
+            http_ok
+        )
+
+        # 3. TLS 1.2
+        t12_res, t12_ok = cls.check_tls(domain, "tlsv1.2", timeout)
+        t12_metric = NetworkMetric(0, t12_res, t12_ok and ("2" in t12_res or "3" in t12_res)) # loose check on 2xx/3xx
+
+        # 4. TLS 1.3
+        t13_res, t13_ok = cls.check_tls(domain, "tlsv1.3", timeout)
+        t13_metric = NetworkMetric(0, t13_res, t13_ok and ("2" in t13_res or "3" in t13_res))
+
+        # Determine overall availability (Logic: if any TLS works)
+        is_available = t12_metric.is_success or t13_metric.is_success
+
+        return DomainResult(domain, ping_metric, http_metric, t12_metric, t13_metric, is_available)
+
+# --- Orchestration ---
+
+class TestManager:
+    """Orchestrates the testing process."""
+    
+    def __init__(self, ui: ConsoleRenderer, threads: int = 10):
+        self.ui = ui
+        self.threads = threads
+        self.fw_type = SystemController.detect_fw_type()
+
+    def load_hostlist(self, path: str) -> List[str]:
+        try:
+            with open(path, 'r') as f:
+                return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except Exception as e:
+            self.ui.log(f"{Colors.RED}Error reading hostlist: {e}{Colors.END}")
+            return []
+
+    def run_strategy(self, name: str, config_path: str, hosts: List[str]) -> StrategyStats:
+        stats = StrategyStats(name=name, config_path=config_path, total_checked=len(hosts))
+        
+        # 1. Apply Config
+        self.ui.log(f"Applying strategy: {Colors.BOLD}{name}{Colors.END}...", to_file=False)
+        if not SystemController.apply_config(config_path, self.fw_type):
+            self.ui.log(f"{Colors.RED}Failed to apply configuration.{Colors.END}")
+            return stats
+
+        # 2. Baseline Latency
+        base_ms, base_ok = NetworkTester.ping("google.com", timeout=2)
+        stats.google_latency = base_ms if base_ok else float('inf')
+
+        # 3. Parallel Test
+        completed = 0
+        with ThreadPoolExecutor(max_workers=self.threads) as executor:
+            future_to_domain = {
+                executor.submit(NetworkTester.analyze_domain, domain, DEFAULT_TIMEOUT): domain 
+                for domain in hosts
+            }
+
             for future in as_completed(future_to_domain):
                 domain = future_to_domain[future]
                 completed += 1
-                
                 try:
-                    domain_result, metrics, ping_time = future.result(timeout=30)
-                    results[domain_result] = metrics
-                    
-                    if ping_time < float('inf'):
-                        ping_times.append(ping_time)
-                    
-                    progress_percent = int((completed / len(future_to_domain)) * 100)
-                    update_status(
-                        domain=domain,
-                        phase="тестирование",
-                        progress=f"{progress_percent}% ({completed}/{len(future_to_domain)})"
-                    )
-                    
-                    if metrics[4]:
-                        available += 1
-                        
+                    result = future.result()
+                    stats.domain_results.append(result)
+                    if result.is_available:
+                        stats.available_count += 1
                 except Exception as e:
-                    log_message(f"Ошибка тестирования {domain}: {e}", Colors.RED, to_file=True)
-    
-    except KeyboardInterrupt:
-        log_message("\nТестирование прервано пользователем", Colors.YELLOW, to_file=True)
-        clear_status()
-        return available, google_ping
-    
-    update_status(phase="завершено", progress="100%", domain="")
-    clear_status()
-    
-    # Выводим таблицу результатов
-    print_results_table(strategy_name, results, total, available, google_ping)
-    
-    return available, google_ping
+                    # Log internal error but don't crash
+                    pass
+                
+                # Update UI
+                pct = int((completed / len(hosts)) * 100)
+                self.ui.update_status(name, "testing", domain, f"{pct}%")
 
-def resolve_strategy_tie(strategies_stats):
-    """Разрешает конфликты при выборе лучшей стратегии"""
-    return sorted(strategies_stats, key=lambda x: (-x[1], x[2]))
+        self.ui.show_strategy_results(stats)
+        return stats
 
-def main_test(configs_to_test, hostlist_path, threads=10, apply_best=True):
-    """Основная функция тестирования"""
-    global output_file
-    
-    # Создаем файл для вывода
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"/tmp/zapret_test_{timestamp}.log"
-    
-    try:
-        output_file = open(log_filename, 'w', encoding='utf-8')
-        # Добавляем BOM для UTF-8 (необязательно, но может помочь)
-        output_file.write('\ufeff')
+    def run_all(self, configs: Dict[str, str], hostlist_path: str, apply_best: bool = True):
+        hosts = self.load_hostlist(hostlist_path)
+        if not hosts:
+            self.ui.log("No hosts to test.")
+            return
+
+        self.ui.print_banner(len(configs), self.threads, hostlist_path)
+        self.ui.log(f"Firewall detected: {Colors.BOLD}{self.fw_type}{Colors.END}")
+
+        all_stats: List[StrategyStats] = []
+
+        try:
+            for name, path in configs.items():
+                stats = self.run_strategy(name, path, hosts)
+                all_stats.append(stats)
+        except KeyboardInterrupt:
+            self.ui.log(f"\n{Colors.RED}Interrupted by user.{Colors.END}")
         
-        log_message(f"{Colors.BOLD}{Colors.CYAN}Тестирование стратегий Zapret{Colors.END}", to_file=True)
-        log_message(f"Время начала: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", Colors.WHITE, to_file=True)
-        log_message(f"Файл лога: {log_filename}", Colors.WHITE, to_file=True)
-        log_message(f"Количество потоков: {threads}", Colors.WHITE, to_file=True)
-        log_message(f"Хостлист: {hostlist_path}", Colors.WHITE, to_file=True)
-        log_message(f"Стратегий для тестирования: {len(configs_to_test)}", Colors.WHITE, to_file=True)
-        log_message(f"{Colors.CYAN}{'='*50}{Colors.END}", to_file=True)
-    except Exception as e:
-        log_message(f"Не удалось создать файл лога: {e}", Colors.RED)
-        output_file = None
-    
-    # Определяем тип фаервола
-    try:
-        result = subprocess.run(
-            ["iptables", "--version"], 
-            capture_output=True, 
-            text=True
+        # Sort by availability (desc), then latency (asc)
+        sorted_stats = sorted(
+            all_stats, 
+            key=lambda x: (-x.available_count, x.google_latency)
         )
-        if "legacy" in result.stdout:
-            fwtype = "iptables"
-        elif "nf_tables" in result.stdout:
-            fwtype = "nftables"
-        else:
-            fwtype = "nftables"
-    except:
-        fwtype = "nftables"
-    
-    log_message(f"Обнаружен фаервол: {Colors.BOLD}{fwtype}{Colors.END}", Colors.WHITE, to_file=True)
-    
-    # Получаем общее количество доменов
-    try:
-        with open(hostlist_path, 'r') as f:
-            total_domains = len([line for line in f if line.strip() and not line.startswith('#')])
-    except:
-        total_domains = 0
-    
-    stats = []
-    
-    try:
-        config_items = list(configs_to_test.items())
-        total_configs = len(config_items)
-        
-        for i, (config_name, config_path) in enumerate(config_items):
-            log_message(f"\n{Colors.CYAN}{'='*90}{Colors.END}", to_file=True)
-            log_message(f"Стратегия [{i+1}/{total_configs}]: {Colors.BOLD}{config_name}{Colors.END}", Colors.YELLOW, to_file=True)
-            
-            # Применяем стратегию
-            if not apply_config(config_path, fwtype):
-                log_message(f"{Colors.RED}Ошибка применения стратегии {config_name}, пропускаю...{Colors.END}", to_file=True)
-                stats.append((config_name, 0, float('inf')))
-                continue
-            
-            # Тестируем
-            available, google_ping = test_strategy(config_name, config_path, hostlist_path, threads)
-            stats.append((config_name, available, google_ping))
-            
-            # if i < total_configs - 1:
-            #     time.sleep(2)
-    
-    except KeyboardInterrupt:
-        log_message(f"\n{Colors.RED}Тестирование прервано пользователем{Colors.END}", to_file=True)
-        clear_status()
-    except Exception as e:
-        log_message(f"\n{Colors.RED}Ошибка тестирования: {e}{Colors.END}", to_file=True)
-    
-    # Выводим итоговую таблицу
-    if stats:
-        sorted_stats = resolve_strategy_tie(stats)
-        
-        clear_status()
-        log_message(f"\n{Colors.CYAN}{'='*90}{Colors.END}", to_file=True)
-        log_message(f"{Colors.BOLD}{Colors.CYAN}ИТОГИ ТЕСТИРОВАНИЯ ВСЕХ СТРАТЕГИЙ{Colors.END}", to_file=True)
-        log_message(f"{Colors.CYAN}{'='*90}{Colors.END}", to_file=True)
-        
-        # Заголовок таблицы
-        header = f"{Colors.BOLD}{Colors.WHITE}{'№':<3} {'Стратегия':<30} {'Доступно':>10} {'%':>8} {'Google Ping':>12} {'Рейтинг':<10}{Colors.END}"
-        separator = f"{Colors.CYAN}{'-'*90}{Colors.END}"
-        
-        log_message(header, to_file=True)
-        log_message(separator, to_file=True)
-        
-        # Топ-10 стратегий
-        top_10 = sorted_stats[:10]
-        best_strategy, best_available, best_ping = sorted_stats[0] if sorted_stats else (None, 0, float('inf'))
-        
-        for idx, (strategy, available, ping) in enumerate(top_10, 1):
-            if total_domains > 0:
-                percentage = (available / total_domains * 100)
-            else:
-                percentage = 0
-            
-            if idx == 1:
-                color = Colors.GREEN
-                rating = f"{Colors.GREEN}ЛУЧШАЯ{Colors.END}"
-            elif percentage > 80:
-                color = Colors.GREEN
-                rating = f"{Colors.GREEN}ОТЛИЧНО{Colors.END}"
-            elif percentage > 60:
-                color = Colors.YELLOW
-                rating = f"{Colors.YELLOW}ХОРОШО{Colors.END}"
-            elif percentage > 40:
-                color = Colors.YELLOW
-                rating = f"{Colors.YELLOW}СРЕДНЕ{Colors.END}"
-            else:
-                color = Colors.RED
-                rating = f"{Colors.RED}ПЛОХО{Colors.END}"
-            
-            if ping < float('inf'):
-                if ping < 50:
-                    ping_color = Colors.GREEN
-                elif ping < 100:
-                    ping_color = Colors.YELLOW
-                else:
-                    ping_color = Colors.RED
-                ping_display = f"{ping_color}{ping:>10.1f}ms{Colors.END}"
-            else:
-                ping_display = f"{Colors.RED}{'N/A':>10}{Colors.END}"
-            
-            strategy_display = strategy[:28] + "..." if len(strategy) > 28 else strategy
-            row = f"{color}{idx:<3}{Colors.END} " \
-                  f"{color}{strategy_display:<30}{Colors.END} " \
-                  f"{color}{available:>10}{Colors.END} " \
-                  f"{color}{percentage:>7.1f}%{Colors.END} " \
-                  f"{ping_display:>12} " \
-                  f"{rating:<10}"
-            
-            log_message(row, to_file=True)
-        
-        log_message(separator, to_file=True)
-        
-        # Лучшая стратегия
-        if best_strategy:
-            if total_domains > 0:
-                best_percentage = (best_available / total_domains * 100)
-            else:
-                best_percentage = 0
-            
-            ping_display = f"{best_ping:.1f}ms" if best_ping < float('inf') else "N/A"
-            
-            log_message(f"\n{Colors.BOLD}{Colors.GREEN}✓ ЛУЧШАЯ СТРАТЕГИЯ:{Colors.END} {Colors.BOLD}{best_strategy}{Colors.END}", to_file=True)
-            log_message(f"{Colors.GREEN}  Доступно: {best_available}/{total_domains} ({best_percentage:.1f}%) доменов, задержка: {ping_display}{Colors.END}", to_file=True)
-            
-            # Применяем лучшую стратегию
-            if apply_best and best_strategy in configs_to_test:
-                log_message(f"\n{Colors.YELLOW}Применяю лучшую стратегию...{Colors.END}", to_file=True)
-                best_config_path = configs_to_test[best_strategy]
-                if apply_config(best_config_path, fwtype):
-                    log_message(f"{Colors.GREEN}✓ Лучшая стратегия успешно применена{Colors.END}", to_file=True)
-                else:
-                    log_message(f"{Colors.RED}✗ Не удалось применить лучшую стратегию{Colors.END}", to_file=True)
-    
-    if output_file:
-        output_file.close()
-        print(f"\n{Colors.BOLD}Полный лог сохранен в: {log_filename}{Colors.END}")
-        print(f"{Colors.YELLOW}Внимание: Файл содержит ANSI цвета. Для правильного отображения используйте:{Colors.END}")
-        print(f"{Colors.CYAN}  cat {log_filename}{Colors.END}")
-        print(f"{Colors.CYAN}  или{Colors.END}")
-        print(f"{Colors.CYAN}  less -R {log_filename}{Colors.END}")
-    
-    clear_status()
-    return best_strategy if stats else None
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Тестирование стратегий Zapret")
-    parser.add_argument("configs_json", help="JSON файл с конфигурациями")
-    parser.add_argument("hostlist", help="Файл хостлиста")
-    parser.add_argument("--threads", "-t", type=int, default=10, 
-                       help="Количество потоков для тестирования (по умолчанию: 10)")
-    parser.add_argument("--no-apply", action="store_true", 
-                       help="Не применять лучшую стратегию по завершении")
+        self.ui.show_final_summary(sorted_stats)
+
+        if apply_best and sorted_stats:
+            best = sorted_stats[0]
+            self.ui.log(f"\n{Colors.YELLOW}Applying best strategy: {best.name}{Colors.END}")
+            if SystemController.apply_config(best.config_path, self.fw_type):
+                self.ui.log(f"{Colors.GREEN}✓ Successfully applied {best.name}{Colors.END}")
+            else:
+                self.ui.log(f"{Colors.RED}✗ Failed to apply best strategy{Colors.END}")
+
+# --- Entry Point ---
+
+def main():
+    parser = argparse.ArgumentParser(description="Автоподбор стратегий Zapret")
+    parser.add_argument("configs_json", help="Path to JSON file with strategies")
+    parser.add_argument("hostlist", help="Path to hostlist file")
+    parser.add_argument("--threads", "-t", type=int, default=DEFAULT_THREADS)
+    parser.add_argument("--no-apply", action="store_true", help="Do not apply best strategy at end")
     
     args = parser.parse_args()
+
+    # Generate log filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = Path(f"/tmp/zapret_test_{timestamp}.log")
+
+    # Initialize UI
+    ui = ConsoleRenderer(log_path)
     
-    # Загружаем конфигурации
+    # Load Configs
     try:
         with open(args.configs_json, 'r') as f:
             configs = json.load(f)
     except Exception as e:
-        print(f"{Colors.RED}Ошибка загрузки JSON файла: {e}{Colors.END}")
+        ui.log(f"{Colors.RED}Failed to load config JSON: {e}{Colors.END}")
         sys.exit(1)
+
+    # Check Root
+    if os.geteuid() != 0:
+        ui.log(f"{Colors.RED}Error: This script must be run as root.{Colors.END}")
+        sys.exit(1)
+
+    # Run
+    manager = TestManager(ui, args.threads)
+    manager.run_all(configs, args.hostlist, apply_best=not args.no_apply)
     
-    main_test(
-        configs, 
-        args.hostlist, 
-        threads=args.threads,
-        apply_best=not args.no_apply
-    )
+    ui.close()
+    print(f"\nFull log saved to: {log_path}")
+
+if __name__ == "__main__":
+    main()
