@@ -30,6 +30,7 @@ ZAPRET_HOSTLIST_PATH = ZAPRET_BASE / "ipset" / "zapret-hosts-user.txt"
 TIMEOUT_PING = 1.5
 TIMEOUT_CURL = 3.0 
 RESTART_DELAY = 1
+TEST_PAUSE = 0.5 # Пауза между стратегиями
 
 # --- Colors ---
 class Colors:
@@ -126,21 +127,43 @@ class ConsoleUI:
         sys.stderr.flush()
 
     def colorize_result(self, result):
-        if result == "FAIL": return f"{Colors.RED}{result}{Colors.END}"
+        if result == "FAIL": 
+            return f"{Colors.RED}{result}{Colors.END}"
+        
         if "ms" in result:
             try:
                 ms = float(result.replace("ms", ""))
-                if ms < 50: return f"{Colors.GREEN}{result}{Colors.END}"
-                elif ms < 200: return f"{Colors.YELLOW}{result}{Colors.END}"
+                if ms < 50: 
+                    return f"{Colors.GREEN}{result}{Colors.END}"
+                elif ms < 200: 
+                    return f"{Colors.YELLOW}{result}{Colors.END}"
                 return f"{Colors.RED}{result}{Colors.END}"
-            except: return f"{Colors.WHITE}{result}{Colors.END}"
+            except: 
+                return f"{Colors.WHITE}{result}{Colors.END}"
         
-        # Проверка HTTP кодов
-        if any(x in result for x in ["200", "301", "302", "307", "403"]):
-             return f"{Colors.GREEN}{result}{Colors.END}"
+        # Check for status codes in format like "HTTP:301" or "TLS1.2:200"
+        # Extract the status code part (everything after the colon)
+        if ":" in str(result):
+            # Split by colon and get the last part (status code)
+            parts = str(result).split(":")
+            if len(parts) > 1:
+                status_code = parts[-1]
+                
+                # Check if it's a numeric status code
+                if status_code.isdigit():
+                    # Get the first digit (hundreds place)
+                    first_digit = status_code[0] if len(status_code) >= 1 else ""
+                    
+                    # 2xx or 3xx status codes are green, others yellow
+                    if first_digit in ["2", "3"]:
+                        return f"{Colors.GREEN}{result}{Colors.END}"
+                    else:
+                        return f"{Colors.YELLOW}{result}{Colors.END}"
         
-        if result == "N/A": return f"{Colors.BLUE}{result}{Colors.END}"
-        return f"{Colors.RED}{result}{Colors.END}"
+        if result == "N/A": 
+            return f"{Colors.BLUE}{result}{Colors.END}"
+        
+        return f"{Colors.YELLOW}{result}{Colors.END}"
 
     def print_results_table(self, strategy_name, results, total_tested, total_available, google_ping):
         self.clear_status()
@@ -197,7 +220,10 @@ class ConsoleUI:
         self.log(f"{Colors.BOLD}{Colors.WHITE}{'№':<3} {'Стратегия':<30} {'Доступно':>10} {'%':>8} {'Google Ping':>12} {'Рейтинг':<10}{Colors.END}", to_file=True)
         self.log(f"{Colors.CYAN}{'-'*90}{Colors.END}", to_file=True)
         
-        for idx, (strategy, available, ping) in enumerate(stats_list, 1):
+        # Take only first 10 items from stats_list
+        top_ten = stats_list[:10]
+        
+        for idx, (strategy, available, ping) in enumerate(top_ten, 1):
             percentage = (available / total_domains * 100) if total_domains > 0 else 0
             
             if idx == 1: color, rating = Colors.GREEN, "ЛУЧШАЯ"
@@ -210,12 +236,17 @@ class ConsoleUI:
             s_disp = strategy[:28] + "..." if len(strategy) > 28 else strategy
             
             row = f"{color}{idx:<3}{Colors.END} " \
-                  f"{color}{s_disp:<30}{Colors.END} " \
-                  f"{color}{available:>10}{Colors.END} " \
-                  f"{color}{percentage:>7.1f}%{Colors.END} " \
-                  f"{ping_display:>12} " \
-                  f"{color}{rating:<10}{Colors.END}"
+                f"{color}{s_disp:<30}{Colors.END} " \
+                f"{color}{available:>10}{Colors.END} " \
+                f"{color}{percentage:>7.1f}%{Colors.END} " \
+                f"{ping_display:>12} " \
+                f"{color}{rating:<10}{Colors.END}"
             self.log(row, to_file=True)
+        
+        # Optional: Add a note that we're only showing top 10
+        if len(stats_list) > 10:
+            self.log(f"{Colors.CYAN}{'-'*90}{Colors.END}", to_file=True)
+            self.log(f"{Colors.YELLOW}Показаны только топ-10 стратегий из {len(stats_list)}{Colors.END}", to_file=True)
 
 # --- Optimized Parallel Network Logic ---
 class NetworkTester:
@@ -276,7 +307,10 @@ class NetworkTester:
             p_t13 = subprocess.Popen(cmd_t13, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         except OSError:
             # Если система перегружена
-            return domain, [ping_res, "ERR", "ERR", "ERR", 0], ping_time
+            time.sleep(1)
+            p_http = subprocess.Popen(cmd_http, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            p_t12 = subprocess.Popen(cmd_t12, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            p_t13 = subprocess.Popen(cmd_t13, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
         def get_proc_res(proc, label):
             try:
@@ -350,6 +384,7 @@ def run_tests(configs, hostlist_path, threads, ui, state):
 
     try:
         for i, (name, path) in enumerate(configs.items(), 1):
+            time.sleep(TEST_PAUSE)
             ui.log(f"\n{Colors.CYAN}{'='*90}{Colors.END}", to_file=True)
             ui.log(f"Стратегия [{i}/{len(configs)}]: {Colors.BOLD}{name}{Colors.END}", Colors.YELLOW, to_file=True)
             

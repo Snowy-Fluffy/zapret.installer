@@ -939,21 +939,21 @@ fast_check_conf() {
     done
     
     # Запрашиваем количество потоков
-if (( count > 500 )); then
-    echo ""
-    read -r -p "Введите количество потоков для тестирования (рекомендуется 100-1000) [Default: 100]: " threads
-    
-    # Set default to 100 if user presses Enter (Your original code had 10, but 100 is safer for large lists)
-    threads=${threads:-100}
+    if (( count > 500 )); then
+        echo ""
+        read -r -p "Введите количество потоков для тестирования (рекомендуется 100-1000) [Default: 100]: " threads
+        
+        # Set default to 100 if user presses Enter (Your original code had 10, but 100 is safer for large lists)
+        threads=${threads:-100}
 
-    # Validate: Must be a number AND greater than 0
-    if ! [[ "$threads" =~ ^[0-9]+$ ]] || (( threads < 1 )); then
-        echo -e "\e[31mНекорректное количество потоков. Используется 100.\e[0m"
-        threads=100
+        # Validate: Must be a number AND greater than 0
+        if ! [[ "$threads" =~ ^[0-9]+$ ]] || (( threads < 1 )); then
+            echo -e "\e[31mНекорректное количество потоков. Используется 100.\e[0m"
+            threads=100
+        fi
+    else 
+        threads=$count
     fi
-else 
-    threads=$count
-fi
 
     echo ""
     echo -e "\e[36mВыберите стратегии для проверки:\e[0m"
