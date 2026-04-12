@@ -1,58 +1,125 @@
 <div align="center">
 
-# [gigbh/zapret.installer](https://github.com/gigbh/zapret.installer)
+## [gigbh/zapret.installer](https://github.com/gigbh/zapret.installer)
 
 ### Автоматическая установка и удобное управление [bol-van/zapret](https://github.com/bol-van/zapret)
 
 </div>
 
-Облегчает установку zapret для новичков и тех, кто не хочет разбираться в его работе.  
-Устанавливает [zapret из оффициального репозитория](https://github.com/bol-van/zapret), CLI панель управления и [репозиторий со стратегиями и списками доменов](https://github.com/Snowy-Fluffy/zapret.cfgs).
+Упрощает установку zapret для новичков и тех, кто не хочет разбираться в деталях его работы.  
+Устанавливает [zapret из официального репозитория](https://github.com/bol-van/zapret), CLI-панель управления и [репозиторий со стратегиями и списками доменов](https://github.com/Snowy-Fluffy/zapret.cfgs).
 
-Поддерживает режим шифрования всего трафика, кроме доменов/IP из листа исключений.
+---
 
-### Установка  
+### 📌 Ключевые возможности
 
-Запуск скрипта установки (необходимо наличие *curl* в системе):  
+- **Автоматическая установка** — скрипт сам определит вашу ОС, установит зависимости и настроит zapret.
+- **Гибкое управление** — выбор стратегий обхода, редактирование списков доменов/IP прямо из меню.
+- **Режим шифрования всего трафика** — возможность зашифровать весь исходящий трафик, кроме адресов из листа исключений.
+- **Игровой режим** — специальный режим для обхода блокировок в играх и приложениях, использующих нестандартные порты.
+- **Поддержка множества дистрибутивов** — от Debian/Ubuntu до OpenWrt и Alpine.
+
+---
+
+### 🔐 Режим шифрования всего трафика (Игровой режим)
+
+Скрипт поддерживает режим, при котором **шифруется весь исходящий трафик**, за исключением доменов и IP-адресов, указанных в **листе исключений**.
+
+#### Как включить:
+1. Запустите панель управления: `zapret`
+2. Перейдите в **"Управление конфигурацией Запрета"**
+3. Выберите **"Включить игровой режим"**
+
+После включения весь трафик будет обрабатываться через zapret, кроме адресов из файла:  
+`/opt/zapret/ipset/zapret-hosts-user-exclude.txt`
+
+#### Как добавить исключения:
+- Через меню: выберите **"Добавить IP или домены в лист исключений (exclude)"**
+- Вручную: отредактируйте файл `/opt/zapret/ipset/zapret-hosts-user-exclude.txt`
+
+> 💡 **Пример использования:**  
+> Включите игровой режим для обхода блокировок во всех приложениях, а в лист исключений добавьте домены российских сервисов, которые не должны замедляться.
+
+---
+
+### 🚀 Установка
+
+Запуск скрипта установки (требуется `curl`):
+
 ```bash
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/gigbh/zapret.installer/refs/heads/main/installer.sh)"
 ```
 
-Вызов панели управления:  
+После установки для вызова панели управления используйте:
+
 ```bash
 zapret
 ```
 
-### Поддержка
+---
 
-На данный момент поддерживаются дистрибутивы:  
-- Debian, Ubuntu, Mint
-- Fedora
-- Arch Linux, Artix Linux (и их производные)
+### 🖥️ Поддерживаемые дистрибутивы
+
+На данный момент поддерживаются:
+
+- Debian, Ubuntu, Linux Mint
+- Fedora, AlmaLinux, Rocky Linux, RedOS, Oracle Linux
+- Arch Linux, Artix Linux, CachyOS, EndeavourOS, Manjaro, Garuda
 - Alt Linux
 - Void Linux
 - Gentoo Linux
-- Redos Linux
-- Oracle Linux
-- OpenSUSE
-- Aipline Linux
+- openSUSE
+- Alpine Linux
 - OpenWrt
 
 > [!IMPORTANT]
-> На Openwrt также советую попробовать [zapret-openwrt](https://github.com/remittor/zapret-openwrt)
+> На OpenWrt также рекомендую попробовать [zapret-openwrt](https://github.com/remittor/zapret-openwrt)
 
-> [!IMPORTANT]
-> Системы инициализации *runit*, *OpenRC* и *SysVinit* поддерживаются только частично.
+> [!NOTE]
+> Системы инициализации **runit**, **OpenRC** и **SysVinit** поддерживаются частично.
 
-В будущем будет добавлена поддержка других дистрибутивов и систем инициализации.
+---
 
-О всех багах и недочётах сообщайте в [issues](https://github.com/gigbh/zapret.installer/issues) или в чат моего [Telegram-канала](https://t.me/linux_hi_chat).
+### 🛠️ Управление
 
-> [!IMPORTANT]
-> Также советую попробовать [zapret-discord-youtube-linux](https://github.com/Sergeydigl3/zapret-discord-youtube-linux)
+После установки введите команду `zapret` для доступа к интерактивному меню:
 
-### Скриншоты
+- **Проверка и установка обновлений** — обновляет zapret и скрипт управления.
+- **Смена конфигурации** — выбор стратегии обхода, хостлистов.
+- **Управление сервисом** — старт/стоп, автозагрузка, просмотр статуса.
+- **Работа со списками** — добавление/удаление доменов и IP, поиск, редактирование.
+- **Игровой режим** — включение/выключение шифрования всего трафика.
+
+---
+
+### 📸 Скриншоты
+
 ![Основное меню](https://github.com/user-attachments/assets/1b08f280-e435-4f59-aa60-3749e0f25ba0)
-![Подменю](https://github.com/user-attachments/assets/27c18e1a-2f6b-4aba-a7df-10f53993b365)
+
+![Подменю управления конфигурацией](https://github.com/user-attachments/assets/27c18e1a-2f6b-4aba-a7df-10f53993b365)
+
+---
+
+### ⚠️ Известные ограничения и баги
+
+- Некоторые стратегии могут требовать ручной настройки под вашу сеть.
+- На системах с малым объёмом оперативной памяти возможны ошибки при работе с большими списками.
+- Отчёты о багах и предложения направляйте в [Issues](https://github.com/gigbh/zapret.installer/issues) или в чат [Telegram-канала](https://t.me/linux_hi_chat).
+
+---
+
+### 🔗 Полезные ссылки
+
+- [Оригинальный репозиторий zapret](https://github.com/bol-van/zapret)
+- [Конфигурации и списки (zapret.cfgs)](https://github.com/Snowy-Fluffy/zapret.cfgs)
+- [Альтернативный проект: zapret-discord-youtube-linux](https://github.com/Sergeydigl3/zapret-discord-youtube-linux)
+
+---
+
+### 👨‍💻 Автор и поддержка
+
+Сделано с ❤️ для сообщества.  
+Автор: [gigbh](https://github.com/gigbh)  
+Обратная связь: [Telegram-канал](https://t.me/linux_hi) | [Чат поддержки](https://t.me/linux_hi_chat)
 
 
