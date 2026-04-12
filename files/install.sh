@@ -149,6 +149,7 @@ install_zapret_release() {
     cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
     touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
+    touch /opt/zapret/ipset/zapret-hosts-user-exclude.txt || error_exit "не удалось автоматически создать exclude ipset"
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
     cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
     ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
@@ -207,6 +208,7 @@ install_zapret_git() {
     cp -r /opt/zapret/zapret.cfgs/bin/* /opt/zapret/files/fake || error_exit "не удалось автоматически скопировать fake bin"
     rm -f /opt/zapret/ipset/zapret-hosts-user.txt
     touch /opt/zapret/ipset/ipset-game.txt || error_exit "не удалось автоматически создать game ipset"
+    touch /opt/zapret/ipset/zapret-hosts-user-exclude.txt || error_exit "не удалось автоматически создать exclude ipset"
     cp -r /opt/zapret/zapret.cfgs/lists/list-basic.txt /opt/zapret/ipset/zapret-hosts-user.txt || error_exit "не удалось автоматически скопировать хостлист"
     cp -r /opt/zapret/zapret.cfgs/lists/ipset-discord.txt /opt/zapret/ipset/ipset-discord.txt || error_exit "не удалось автоматически скопировать ипсет"
     ln -s /opt/zapret.installer/zapret-control.sh /bin/zapret || error_exit "не удалось создать символическую ссылку"
