@@ -6,6 +6,7 @@ source "/opt/zapret.installer/files/init.sh"
 source "/opt/zapret.installer/files/menu.sh"
 source "/opt/zapret.installer/files/service.sh"
 source "/opt/zapret.installer/files/install.sh"
+source "/opt/zapret.installer/files/strategy.sh"
 
 set -e  
 
