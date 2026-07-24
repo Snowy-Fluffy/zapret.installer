@@ -1,3 +1,6 @@
+# ⚠️ ВНИМАНИЕ! НА ДАННЫЙ МОМЕНТ ПРОЕКТ ЗАМОРОЖЕН.
+## Но ожидайте, я обязательно сделаю обновление или выпущу новую Anti-DPI утилиту с новым кодом. Обновления по этой информации, можно получить в телеграм канале https://t.me/linux_hi
+
 <div align="center">
 
 # [Snowy-Fluffy/zapret.installer](https://github.com/Snowy-Fluffy/zapret.installer)
